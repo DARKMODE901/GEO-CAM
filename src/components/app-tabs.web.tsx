@@ -24,8 +24,14 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton>Home</TabButton>
           </TabTrigger>
+          <TabTrigger name="geocam" href="/geocam" asChild>
+            <TabButton>📷 Cámara</TabButton>
+          </TabTrigger>
+          <TabTrigger name="mapa" href="/mapa" asChild>
+            <TabButton>🗺️ Mapa</TabButton>
+          </TabTrigger>
           <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
+            <TabButton>Explorar</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -55,7 +61,7 @@ export function CustomTabList(props: TabListProps) {
     <View {...props} style={styles.tabListContainer}>
       <ThemedView type="backgroundElement" style={styles.innerContainer}>
         <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
+          GeoCam
         </ThemedText>
 
         {props.children}

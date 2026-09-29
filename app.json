@@ -24,15 +24,26 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
       [
-        "expo-splash-screen",
+        "expo-camera",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "cameraPermission": "GeoCam usa la cámara para tomar fotos geolocalizadas.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "GeoCam usa tu ubicación para registrar dónde tomaste cada foto."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "GeoCam accede a tu galería para importar fotos."
         }
       ]
+    
     ],
     "experiments": {
       "typedRoutes": true,
