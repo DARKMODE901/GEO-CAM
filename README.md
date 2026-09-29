@@ -153,4 +153,4 @@ npx expo start
 
 ## 👤 Autor
 
-Desarrollado como práctica de **Desarrollo Móvil** — Hooks avanzados con React Native y Expo.
+**Estudiante(s):** Leonardo Carrillo Caballero, loreley Gonzales Iguaran
