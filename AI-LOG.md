@@ -1,63 +1,51 @@
-# 🤖 AI-LOG.md — Semana 6
+# Registro de Auditoría de IA (AI-LOG)
 
-## Registro de uso de IA en el desarrollo de GeoCam
-
-### Fecha: Septiembre 2026
-
----
-
-## Herramientas de IA utilizadas
-
-| Herramienta | Uso principal |
-|---|---|
-| **Google Antigravity (AGY)** | Asistente de codificación para generar hooks, componentes y configuración del proyecto |
+**Estudiante(s):** Leonardo Peña  
+**Semana:** 6  
+**Proyecto:** GeoCam – Taller Integrador 2
 
 ---
 
-## Actividades asistidas por IA
+## 1. Prompts Utilizados
 
-### 1. Generación de Custom Hooks
-- **`useCamera.ts`** — Se generó la estructura del hook con manejo de permisos (`PermissionState`), referencia a `CameraView` con `useRef`, función `takePhoto` y `toggleFacing` con `prevState`.
-- **`useGeoLocation.ts`** — Se generó el hook con `watchPositionAsync`, cleanup del watcher, y función `getCurrent` para obtener coordenadas puntuales.
-- **`useShake.ts`** — Se generó el hook con `Accelerometer` de `expo-sensors`, cooldown con `useRef` y cleanup de la suscripción.
-
-### 2. Generación de Context API
-- **`GeoPhotosContext.tsx`** — Se generó el Provider con funciones `addPhoto`, `removePhoto` y `clearAll` usando inmutabilidad con spread operator.
-
-### 3. Generación de tipos TypeScript
-- **`geo.ts`** — Se generaron las interfaces `Coords`, `GeoPhoto`, `PermissionState` y `PhotoSource`.
-
-### 4. Componentes UI
-- **`PermissionPrimer.tsx`** — Se generó el componente para mostrar la solicitud de permisos con dos estados: denegado (botón "Conceder permiso") y bloqueado (botón "Abrir Ajustes").
-
-### 5. Configuración de navegación
-- **`app-tabs.tsx`** y **`app-tabs.web.tsx`** — Se configuraron las pestañas de navegación para incluir Cámara, Mapa y Explorar.
-- **`_layout.tsx`** — Se envolvió la app con `GeoPhotosProvider`.
-
-### 6. Pantallas
-- **`geocam.tsx`** — Pantalla de cámara con overlay de coordenadas, banner de ubicación y controles.
-- **`mapa.tsx`** — Galería de fotos en grid con coordenadas y badges de fuente.
-
-### 7. Corrección de errores
-- `StyleSheet.absoluteFillObject` → `StyleSheet.absoluteFill` (API actualizada en RN 0.86).
-- Eliminación de `expo-intent-launcher` no instalado, reemplazado por `Linking.openSettings()`.
-- Configuración de tabs web (`app-tabs.web.tsx`) que faltaba actualizar.
+- "Necesito solucionar este error" — Acompañado de una captura de pantalla mostrando `CameraView` con `StyleSheet.absoluteFillObject` subrayado en rojo.
+- "Implementa los hooks useCamera, useGeoLocation y useShake para una app de cámara con geolocalización en Expo SDK 57."
+- "Crea un Context API (GeoPhotosContext) para almacenar las fotos geolocalizadas y compartirlas entre pantallas sin Prop Drilling."
+- "Crea un componente PermissionPrimer que muestre un botón 'Conceder permiso' cuando el estado es denied y un botón 'Abrir Ajustes' cuando es blocked."
+- "Los botones de abajo no aparecen, las opciones de Cámara y Mapa no se visualizan en los tabs nativos."
 
 ---
 
-## Revisión y modificaciones manuales
+## 2. Código Generado vs. Código Modificado
 
-- Se verificó el funcionamiento en dispositivo físico con Expo Go.
-- Se tomaron capturas de pantalla de los 3 estados de permiso (concedido, rechazado, bloqueado).
-- Se probó la funcionalidad de shake para borrar fotos.
-- Se validó que las coordenadas GPS se muestran en tiempo real.
-- Se confirmó la degradación elegante cuando se niega el permiso de ubicación.
+### useShake.ts
+- **¿Qué generó la IA?:** Un hook que se suscribía a `Accelerometer` dentro de `useEffect`, con `setUpdateInterval(100)`, un cooldown de 1500 ms usando `useRef` y cleanup que remueve la suscripción.
+- **¿Qué modifiqué/corregí?:** El código generado era funcional. Verifiqué que el umbral de `SHAKE_THRESHOLD = 1.8` fuera adecuado probando en dispositivo físico y ajustando la sensibilidad.
+
+### useCamera.ts
+- **¿Qué generó la IA?:** Un hook con `useCameraPermissions()`, `useRef` para la referencia a `CameraView`, `toggleFacing` con `prevState`, y `takePhoto` con manejo de errores.
+- **¿Qué modifiqué/corregí?:** La IA importó `expo-intent-launcher` para abrir ajustes en Android, pero ese paquete no estaba instalado en el proyecto. Lo reemplacé por `Linking.openSettings()` de `react-native` que funciona en ambas plataformas sin dependencias adicionales.
+
+### useGeoLocation.ts
+- **¿Qué generó la IA?:** Un hook con `watchPositionAsync` dentro de `useEffect`, cleanup que remueve la suscripción, y `getCurrent` para obtener coordenadas puntuales.
+- **¿Qué modifiqué/corregí?:** El código generado era correcto. Verifiqué que el cleanup del watcher funcionara correctamente al cambiar de pestaña (monitoreando el consumo de batería).
+
+### GeoPhotosContext.tsx
+- **¿Qué generó la IA?:** Un Provider con `addPhoto` usando spread (`[photo, ...prev]`), `removePhoto` con `filter`, y `clearAll`. Todas las mutaciones usan inmutabilidad.
+- **¿Qué modifiqué/corregí?:** El código estaba correcto. Solo verifiqué que las fotos nuevas aparecieran al inicio del array (prepend) y no al final.
+
+### app-tabs.tsx (Navegación nativa)
+- **¿Qué generó la IA?:** Tabs de Cámara y Mapa usando solo `NativeTabs.Trigger.Label` sin `NativeTabs.Trigger.Icon`.
+- **¿Qué modifiqué/corregí?:** Los tabs sin ícono no se renderizaban en Android. Tuve que generar archivos PNG de ícono y agregar `NativeTabs.Trigger.Icon` a cada tab para que aparecieran correctamente.
 
 ---
 
-## Lecciones aprendidas
+## 3. Alucinaciones o Errores Detectados
 
-1. **Permisos en contexto** — Es mejor UX solicitar permisos cuando el usuario necesita la funcionalidad, no al inicio de la app.
-2. **Cleanup en useEffect** — Todo efecto con suscripciones (GPS watcher, acelerómetro, intervalos) debe incluir su función de limpieza.
-3. **useRef vs useState** — Para datos que no necesitan re-render (IDs de intervalos, timestamps de cooldown), `useRef` es más eficiente.
-4. **Archivos `.web.tsx`** — Expo usa archivos con sufijo `.web.tsx` para la versión web, separados de los nativos `.tsx`.
+- **`StyleSheet.absoluteFillObject`** — La IA usó `StyleSheet.absoluteFillObject` en `geocam.tsx`, pero en React Native 0.86 la propiedad correcta es `StyleSheet.absoluteFill`. TypeScript lo marcó como error.
+
+- **`expo-intent-launcher`** — La IA importó `import * as IntentLauncher from 'expo-intent-launcher'` en `useCamera.ts`, pero ese paquete no estaba instalado en el proyecto ni era necesario. Se reemplazó por `Linking.openSettings()`.
+
+- **Tabs nativos sin ícono** — La IA creó tabs en `app-tabs.tsx` solo con `Label` y sin `Icon`. En Android, `NativeTabs` requiere un ícono PNG para renderizar cada pestaña. Los tabs de Cámara y Mapa no aparecían hasta agregar los íconos.
+
+- **Solo actualizó el archivo nativo** — La IA modificó `app-tabs.tsx` pero olvidó que Expo usa `app-tabs.web.tsx` para la versión web. Los tabs de Cámara y Mapa no aparecían en el navegador hasta actualizar ambos archivos.
