@@ -1,6 +1,6 @@
 # Registro de Auditoría de IA (AI-LOG)
 
-**Estudiante(s):** Leonardo Peña  
+**Estudiante(s):** Leonardo Carrillo Caballero, loreley Gonzales Iguaran
 **Semana:** 6  
 **Proyecto:** GeoCam – Taller Integrador 2
 
@@ -12,7 +12,6 @@
 - "Implementa los hooks useCamera, useGeoLocation y useShake para una app de cámara con geolocalización en Expo SDK 57."
 - "Crea un Context API (GeoPhotosContext) para almacenar las fotos geolocalizadas y compartirlas entre pantallas sin Prop Drilling."
 - "Crea un componente PermissionPrimer que muestre un botón 'Conceder permiso' cuando el estado es denied y un botón 'Abrir Ajustes' cuando es blocked."
-- "Los botones de abajo no aparecen, las opciones de Cámara y Mapa no se visualizan en los tabs nativos."
 
 ---
 
