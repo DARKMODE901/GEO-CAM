@@ -1,6 +1,6 @@
 # Registro de Auditoría de IA (AI-LOG)
 
-**Estudiante(s):** Leonardo Carrillo Caballero, loreley Gonzales Iguaran
+**Estudiante(s):** Leonardo Carrillo Caballero
 **Semana:** 6  
 **Proyecto:** GeoCam – Taller Integrador 2
 
@@ -36,6 +36,10 @@
 ### app-tabs.tsx (Navegación nativa)
 - **¿Qué generó la IA?:** Tabs de Cámara y Mapa usando solo `NativeTabs.Trigger.Label` sin `NativeTabs.Trigger.Icon`.
 - **¿Qué modifiqué/corregí?:** Los tabs sin ícono no se renderizaban en Android. Tuve que generar archivos PNG de ícono y agregar `NativeTabs.Trigger.Icon` a cada tab para que aparecieran correctamente.
+
+### mapa.tsx (Integración de Mapa)
+- **¿Qué generó la IA?:** Modificó la pantalla de la galería de fotos para incluir una imagen de OpenStreetMap usando la API estática (`staticmap.openstreetmap.de`) pasándole latitud y longitud. También implementó una función para abrir el mapa interactivo en el navegador al tocar la imagen usando `Linking.openURL()`.
+- **¿Qué modifiqué/corregí?:** Durante el proceso de integración, el entorno local de VS Code sobrescribió el código nuevo con una versión antigua porque el archivo había quedado abierto en el editor ("The content of the file is newer"). Tuve que cerrar el archivo sin guardar (`Don't Save`) y pedir a la IA que reescribiera el código completo del componente.
 
 ---
 

@@ -44,20 +44,30 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 <table>
   <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/03-camara-sin-gps.jpg" width="220" /><br/>
+    <td align="center" width="20%">
+      <img src="screenshots/03-camara-sin-gps.jpg" width="180" /><br/>
       <b>Cámara sin GPS</b><br/>
-      <sub>Banner amarillo: "Activa la ubicación para etiquetar tus fotos". La cámara sigue funcionando.</sub>
+      <sub>Banner para activar ubicación.</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/05-mapa-galeria.jpg" width="220" /><br/>
+    <td align="center" width="20%">
+      <img src="screenshots/05-mapa-galeria.jpg" width="180" /><br/>
       <b>Galería con fotos</b><br/>
-      <sub>Fotos capturadas con badge de fuente (CAM/GAL), coordenadas GPS y botón de eliminar.</sub>
+      <sub>Fotos capturadas con badge (CAM/GAL).</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/06-mapa-vacio.jpg" width="220" /><br/>
+    <td align="center" width="20%">
+      <img src="screenshots/06-mapa-vacio.jpg" width="180" /><br/>
       <b>Mapa vacío</b><br/>
-      <sub>"Sin fotos registradas" — indica al usuario ir a la pestaña Cámara.</sub>
+      <sub>"Sin fotos registradas".</sub>
+    </td>
+    <td align="center" width="20%">
+      <img src="screenshots/07-mapa-coordenadas.png" width="180" /><br/>
+      <b>Mini-Mapa Integrado</b><br/>
+      <sub>Mini-mapa estático debajo de la foto.</sub>
+    </td>
+    <td align="center" width="20%">
+      <img src="screenshots/08-openstreetmap-ubicacion.png" width="180" /><br/>
+      <b>OpenStreetMap</b><br/>
+      <sub>Abre la ubicación en el navegador.</sub>
     </td>
   </tr>
 </table>
@@ -153,4 +163,4 @@ npx expo start
 
 ## 👤 Autor
 
-**Estudiante(s):** Leonardo Carrillo Caballero, loreley Gonzales Iguaran
+**Estudiante(s):** Leonardo Carrillo Caballero
