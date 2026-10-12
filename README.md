@@ -16,53 +16,71 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 ---
 
-## 📱 Capturas de pantalla
+## 📱 Capturas de pantalla y Evidencias de Funcionamiento
 
-### 🔐 Los 3 estados de permiso: Concedido, Rechazado y Bloqueado
+### 🗄️ Semana 7: Base de Datos Local Offline-First (SQLite + Drizzle ORM)
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/09-galeria-sqlite-offline.png" width="220" /><br/>
+      <b>📸 Galería Offline en SQLite</b><br/>
+      <sub>Persistencia en SQLite (<code>geocam.db</code>) y fotos en <code>FileSystem.documentDirectory</code>. Contador en vivo y barra de coordenadas.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/10-filtro-favoritas.png" width="220" /><br/>
+      <b>⭐ Favoritas (Migración 2)</b><br/>
+      <sub>Columna <code>is_favorite</code> agregada por migración SQL. Alternado reactivo con estrella activa y filtrado instantáneo vía <code>useLiveQuery</code>.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/11-modal-mover-album.png" width="220" /><br/>
+      <b>📁 Asignación a Álbum</b><br/>
+      <sub>Modal para relacionar fotos con la tabla <code>albums</code> mediante clave foránea (<code>album_id</code>).</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/12-filtro-por-album.png" width="220" /><br/>
+      <b>🔍 Filtrado por Álbum</b><br/>
+      <sub>Pestaña del álbum <b>"Prueba"</b> activa, mostrando únicamente las fotos vinculadas a ese álbum y su badge correspondiente.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/13-gestor-albumes-metricas.png" width="220" /><br/>
+      <b>📊 Gestor y Métricas SQLite</b><br/>
+      <sub>Pestaña <b>Álbumes</b> con métricas en tiempo real (Fotos, Favoritas, Álbumes) y operaciones CRUD para crear y eliminar álbumes.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/04-camara-con-gps.jpg" width="220" /><br/>
+      <b>📷 Captura Geolocalizada</b><br/>
+      <sub>Cámara en tiempo real con degradación elegante de GPS y badge de captura permanente.</sub>
+    </td>
+  </tr>
+</table>
+
+### 🔐 Semana 6: Cámara, Permisos en Contexto y Degradación Elegante
 
 <table>
   <tr>
     <td align="center" width="33%">
       <img src="screenshots/01-permiso-camara.jpg" width="220" /><br/>
       <b>❌ Rechazado (Denied)</b><br/>
-      <sub>La app pide el permiso en contexto con un botón "Conceder permiso". No se solicita automáticamente al abrirse.</sub>
+      <sub>La app pide el permiso en contexto con un botón "Conceder permiso".</sub>
     </td>
     <td align="center" width="33%">
       <img src="screenshots/02-permiso-bloqueado.jpg" width="220" /><br/>
       <b>🔒 Bloqueado (Blocked)</b><br/>
-      <sub>Si el usuario denegó permanentemente, aparece el botón "Abrir Ajustes" para ir a la configuración del sistema.</sub>
+      <sub>Si el usuario denegó permanentemente, aparece el botón "Abrir Ajustes".</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/04-camara-con-gps.jpg" width="220" /><br/>
-      <b>✅ Concedido (Granted)</b><br/>
-      <sub>Cámara funcionando con coordenadas GPS en tiempo real. Badge "CAM" en la miniatura de la última foto.</sub>
-    </td>
-  </tr>
-</table>
-
-### 📷 Funcionalidades de la app
-
-<table>
-  <tr>
     <td align="center" width="33%">
       <img src="screenshots/03-camara-sin-gps.jpg" width="220" /><br/>
       <b>Cámara sin GPS</b><br/>
-      <sub>Banner amarillo: "Activa la ubicación para etiquetar tus fotos". La cámara sigue funcionando.</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/05-mapa-galeria.jpg" width="220" /><br/>
-      <b>Galería con fotos</b><br/>
-      <sub>Fotos capturadas con badge de fuente (CAM/GAL), coordenadas GPS y botón de eliminar.</sub>
-    </td>
-    <td align="center" width="33%">
-      <img src="screenshots/06-mapa-vacio.jpg" width="220" /><br/>
-      <b>Mapa vacío</b><br/>
-      <sub>"Sin fotos registradas" — indica al usuario ir a la pestaña Cámara.</sub>
+      <sub>Degradación elegante: la cámara sigue funcionando sin bloquear al usuario.</sub>
     </td>
   </tr>
 </table>
 
 ---
+
 
 ## 🛠️ Tecnologías utilizadas
 
