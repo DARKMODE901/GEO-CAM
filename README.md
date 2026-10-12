@@ -20,39 +20,49 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 ### 🗄️ Semana 7: Base de Datos Local Offline-First (SQLite + Drizzle ORM)
 
+#### 🔹 Galería Persistente, Favoritas y Relaciones
 <table>
   <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/09-galeria-sqlite-offline.png" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/09-galeria-sqlite-offline.png" width="200" /><br/>
       <b>📸 Galería Offline en SQLite</b><br/>
-      <sub>Persistencia en SQLite (<code>geocam.db</code>) y fotos en <code>FileSystem.documentDirectory</code>. Contador en vivo y barra de coordenadas.</sub>
+      <sub>Persistencia en SQLite (<code>geocam.db</code>) y fotos en <code>FileSystem.documentDirectory</code>. Contador en vivo y barra GPS.</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/10-filtro-favoritas.png" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/10-filtro-favoritas.png" width="200" /><br/>
       <b>⭐ Favoritas (Migración 2)</b><br/>
       <sub>Columna <code>is_favorite</code> agregada por migración SQL. Alternado reactivo con estrella activa y filtrado instantáneo vía <code>useLiveQuery</code>.</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/11-modal-mover-album.png" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/11-modal-mover-album.png" width="200" /><br/>
       <b>📁 Asignación a Álbum</b><br/>
       <sub>Modal para relacionar fotos con la tabla <code>albums</code> mediante clave foránea (<code>album_id</code>).</sub>
     </td>
-  </tr>
-  <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/12-filtro-por-album.png" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/12-filtro-por-album.png" width="200" /><br/>
       <b>🔍 Filtrado por Álbum</b><br/>
       <sub>Pestaña del álbum <b>"Prueba"</b> activa, mostrando únicamente las fotos vinculadas a ese álbum y su badge correspondiente.</sub>
+    </td>
+  </tr>
+</table>
+
+#### 🔹 Gestión de Álbumes, Métricas e Integridad Referencial
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/14-modal-crear-album.png" width="220" /><br/>
+      <b>➕ Creación de Álbum</b><br/>
+      <sub>Modal para ingresar nombre y descripción, insertando un nuevo registro en la tabla <code>albums</code>.</sub>
     </td>
     <td align="center" width="33%">
       <img src="screenshots/13-gestor-albumes-metricas.png" width="220" /><br/>
       <b>📊 Gestor y Métricas SQLite</b><br/>
-      <sub>Pestaña <b>Álbumes</b> con métricas en tiempo real (Fotos, Favoritas, Álbumes) y operaciones CRUD para crear y eliminar álbumes.</sub>
+      <sub>Pestaña <b>Álbumes</b> con métricas en tiempo real (Fotos, Favoritas, Álbumes) y conteo reactivo de fotos asociadas.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/04-camara-con-gps.jpg" width="220" /><br/>
-      <b>📷 Captura Geolocalizada</b><br/>
-      <sub>Cámara en tiempo real con degradación elegante de GPS y badge de captura permanente.</sub>
+      <img src="screenshots/15-alerta-eliminar-album.png" width="220" /><br/>
+      <b>🗑️ Integridad (ON DELETE set null)</b><br/>
+      <sub>Al eliminar el álbum, las fotos no se borran; quedan sin álbum preservando su integridad y archivo físico.</sub>
     </td>
   </tr>
 </table>
