@@ -31,7 +31,7 @@ export default function AppTabs() {
             <TabButton>🗺️ Mapa</TabButton>
           </TabTrigger>
           <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explorar</TabButton>
+            <TabButton>📁 Álbumes</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>

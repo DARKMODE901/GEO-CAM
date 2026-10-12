@@ -39,9 +39,9 @@ export default function AppTabs() {
         />
       </NativeTabs.Trigger>
 
-      {/* Explorar */}
+      {/* Álbumes */}
       <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explorar</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Álbumes</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/explore.png')}
           renderingMode="template"

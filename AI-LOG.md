@@ -52,3 +52,53 @@
 - **Tabs nativos sin ícono** — La IA creó tabs en `app-tabs.tsx` solo con `Label` y sin `Icon`. En Android, `NativeTabs` requiere un ícono PNG para renderizar cada pestaña. Los tabs de Cámara y Mapa no aparecían hasta agregar los íconos.
 
 - **Solo actualizó el archivo nativo** — La IA modificó `app-tabs.tsx` pero olvidó que Expo usa `app-tabs.web.tsx` para la versión web. Los tabs de Cámara y Mapa no aparecían en el navegador hasta actualizar ambos archivos.
+
+
+---
+
+# Registro de Auditoría de IA – Semana 7
+
+**Estudiante(s):** Leonardo Carrillo Caballero  
+**Semana:** 7  
+**Proyecto:** GeoCam Persistente (Base de Datos Local Offline-First con Drizzle ORM y SQLite)
+
+---
+
+## 1. Prompts Utilizados
+
+- *"Implementa la persistencia offline de GeoCam utilizando expo-sqlite, Drizzle ORM y expo-file-system siguiendo la arquitectura estricta de 5 capas."*
+- *"Genera el esquema type-safe con Drizzle para álbumes y fotos con foreign keys y genera dos migraciones SQL (la segunda añadiendo notes y isFavorite)."*
+- *"Crea el servicio photoStorage para migrar las imágenes físicas de la caché al directorio permanente FileSystem.documentDirectory."*
+- *"Crea los repositorios photoRepository y albumRepository y hooks reactivos con useLiveQuery de Drizzle para la UI."*
+
+---
+
+## 2. Código Generado vs. Código Modificado
+
+### Esquema Drizzle y Migraciones (`src/db/schema.ts`, `src/drizzle/`)
+- **¿Qué generó la IA?:** Esquema con tablas `albums` y `photos`, definiendo tipos inferidos (`Photo`, `NewPhoto`, `Album`, `NewAlbum`) y relaciones de Drizzle. Se ejecutó `drizzle-kit generate` dos veces creando:
+  1. `0000_init_albums_and_photos.sql` (tablas base con llave foránea y `ON DELETE set null`).
+  2. `0001_add_notes_and_favorites.sql` (adición de `notes` y `is_favorite DEFAULT 0`).
+- **¿Qué modifiqué/corregí?:** Verifiqué que `drizzle.config.ts` utilizara `dialect: 'sqlite'` y `driver: 'expo'`, y que `src/types/declarations.d.ts` declarara los módulos `.sql` para que el compilador de TypeScript los reconozca sin errores.
+
+### Conexión SQLite y Runtime Migrator (`src/db/client.ts`, `src/app/_layout.tsx`)
+- **¿Qué generó la IA?:** Instancia de base de datos con `openDatabaseSync('geocam.db', { enableChangeListener: true })`, ejecución de `PRAGMA foreign_keys = ON;`, e integración de `useMigrations(db, migrations)` en el layout raíz.
+- **¿Qué modifiqué/corregí?:** Verifiqué que la pantalla muestre un indicador de carga durante la migración y capture errores con tipado estricto.
+
+### Almacenamiento Físico (`src/services/photoStorage.ts`)
+- **¿Qué generó la IA?:** Funciones `savePhotoPermanently`, `deletePhysicalPhoto` y `deleteAllPhysicalPhotos` que copian las fotos desde la caché temporal a `FileSystem.documentDirectory` antes de registrar su ruta en SQLite.
+- **¿Qué modifiqué/corregí?:** En Expo SDK 57, la API clásica con `documentDirectory` y `copyAsync` se encuentra bajo `expo-file-system/legacy`. Se corrigió la importación para garantizar 100% de compatibilidad con TypeScript.
+
+### Repositorios y Hooks Reactivos (`src/repositories/`, `src/hooks/`)
+- **¿Qué generó la IA?:** `photoRepository` y `albumRepository` (Capa 3) separando totalmente el SQL de la UI. Hooks `useGeoPhotosDB` y `useAlbumsDB` (Capa 2) utilizando `useLiveQuery` de Drizzle para reactividad instantánea.
+- **¿Qué modifiqué/corregí?:** Se adaptó `GeoPhotosContext.tsx` como puente de arquitectura para exponer las nuevas funciones a las pantallas sin alterar la degradación elegante existente.
+
+---
+
+## 3. Alucinaciones o Errores Detectados / Evitados
+
+- **Driver de servidor evitado:** Se evitó el uso erróneo de `drizzle-orm/better-sqlite3`, empleando exclusivamente `drizzle-orm/expo-sqlite`.
+- **API obsoleto evitado:** No se usó `SQLite.openDatabase`, sino la API moderna síncrona `openDatabaseSync`.
+- **Foreign keys activadas:** Se añadió `expoDb.execSync('PRAGMA foreign_keys = ON;');` inmediatamente tras la apertura de la base de datos.
+- **`drizzle-kit push` evitado:** Se generaron migraciones versionadas en archivos `.sql` aplicadas en el dispositivo mediante el hook `useMigrations`.
+- **Expo SDK 57 FileSystem API:** En SDK 57 `expo-file-system` reestructuró sus exportaciones principales. El uso de `expo-file-system/legacy` permitió mantener la API `documentDirectory` compatible sin errores de TypeScript.

@@ -44,30 +44,20 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 <table>
   <tr>
-    <td align="center" width="20%">
-      <img src="screenshots/03-camara-sin-gps.jpg" width="180" /><br/>
+    <td align="center" width="33%">
+      <img src="screenshots/03-camara-sin-gps.jpg" width="220" /><br/>
       <b>Cámara sin GPS</b><br/>
-      <sub>Banner para activar ubicación.</sub>
+      <sub>Banner amarillo: "Activa la ubicación para etiquetar tus fotos". La cámara sigue funcionando.</sub>
     </td>
-    <td align="center" width="20%">
-      <img src="screenshots/05-mapa-galeria.jpg" width="180" /><br/>
+    <td align="center" width="33%">
+      <img src="screenshots/05-mapa-galeria.jpg" width="220" /><br/>
       <b>Galería con fotos</b><br/>
-      <sub>Fotos capturadas con badge (CAM/GAL).</sub>
+      <sub>Fotos capturadas con badge de fuente (CAM/GAL), coordenadas GPS y botón de eliminar.</sub>
     </td>
-    <td align="center" width="20%">
-      <img src="screenshots/06-mapa-vacio.jpg" width="180" /><br/>
+    <td align="center" width="33%">
+      <img src="screenshots/06-mapa-vacio.jpg" width="220" /><br/>
       <b>Mapa vacío</b><br/>
-      <sub>"Sin fotos registradas".</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="screenshots/07-mapa-coordenadas.png" width="180" /><br/>
-      <b>Mini-Mapa Integrado</b><br/>
-      <sub>Mini-mapa estático debajo de la foto.</sub>
-    </td>
-    <td align="center" width="20%">
-      <img src="screenshots/08-openstreetmap-ubicacion.png" width="180" /><br/>
-      <b>OpenStreetMap</b><br/>
-      <sub>Abre la ubicación en el navegador.</sub>
+      <sub>"Sin fotos registradas" — indica al usuario ir a la pestaña Cámara.</sub>
     </td>
   </tr>
 </table>
@@ -81,6 +71,9 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 | **React Native 0.86** | Framework de desarrollo móvil |
 | **Expo SDK 57** | Plataforma de desarrollo y build |
 | **Expo Router** | Navegación basada en archivos |
+| **expo-sqlite** | Base de datos local SQLite con `openDatabaseSync` |
+| **drizzle-orm & drizzle-kit** | ORM type-safe con migraciones SQL y consultas reactivas (`useLiveQuery`) |
+| **expo-file-system** | Persistencia física de fotos en `documentDirectory` |
 | **expo-camera** | Acceso a la cámara del dispositivo |
 | **expo-location** | Geolocalización (GPS) |
 | **expo-image-picker** | Selección de imágenes de galería |
@@ -89,27 +82,60 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 ---
 
+## 🏗️ Arquitectura Offline-First de 5 Capas
+
+```
+┌────────────────────────────────────────────────────────┐
+│ 1. Pantalla (UI): geocam.tsx, mapa.tsx, explore.tsx    │
+├────────────────────────────────────────────────────────┤
+│ 2. Hooks Reactivos: useGeoPhotosDB, useAlbumsDB        │
+├────────────────────────────────────────────────────────┤
+│ 3. Repositorios: photoRepository, albumRepository      │
+├────────────────────────────────────────────────────────┤
+│ 4. Drizzle ORM / Esquema: schema.ts, relaciones        │
+├────────────────────────────────────────────────────────┤
+│ 5. Motor SQLite: expo-sqlite (openDatabaseSync)        │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## 📁 Estructura del proyecto
 
 ```
 src/
 ├── app/
-│   ├── _layout.tsx          # Layout raíz con GeoPhotosProvider
+│   ├── _layout.tsx          # Layout raíz con migrador runtime (useMigrations)
 │   ├── index.tsx            # Redirect automático a /geocam
 │   ├── geocam.tsx           # Pantalla de cámara principal
-│   ├── mapa.tsx             # Galería de fotos con coordenadas
-│   └── explore.tsx          # Pantalla de exploración
+│   ├── mapa.tsx             # Galería interactiva (notas, favoritas, mapa)
+│   └── explore.tsx          # Gestor de Álbumes y métricas SQLite
 ├── components/
 │   ├── PermissionPrimer.tsx # UI para solicitar permisos
 │   ├── app-tabs.tsx         # Navegación por pestañas (nativo)
 │   └── app-tabs.web.tsx     # Navegación por pestañas (web)
 ├── context/
-│   └── GeoPhotosContext.tsx # Estado global de fotos (Context API)
+│   └── GeoPhotosContext.tsx # Puente reactivo entre repositorios y pantallas
+├── db/
+│   ├── client.ts            # Conexión SQLite con PRAGMA foreign_keys = ON;
+│   └── schema.ts            # Esquema Drizzle (tablas albums y photos)
+├── drizzle/
+│   ├── 0000_init_albums_and_photos.sql # Migración 1: Tablas base
+│   ├── 0001_add_notes_and_favorites.sql# Migración 2: Notas y Favoritas
+│   └── migrations.js        # Índice para el migrador móvil
 ├── hooks/
+│   ├── useAlbumsDB.ts       # Hook reactivo de álbumes (useLiveQuery)
 │   ├── useCamera.ts         # Hook: permisos, captura, flip cámara
 │   ├── useGeoLocation.ts    # Hook: GPS en tiempo real + cleanup
+│   ├── useGeoPhotosDB.ts    # Hook reactivo de fotos (useLiveQuery)
 │   └── useShake.ts          # Hook: detección de shake + cleanup
+├── repositories/
+│   ├── albumRepository.ts   # CRUD encapsulado de álbumes
+│   └── photoRepository.ts   # CRUD encapsulado de fotos y borrado físico
+├── services/
+│   └── photoStorage.ts      # Manejo permanente de imágenes (FileSystem)
 └── types/
+    ├── declarations.d.ts    # Tipos para archivos .sql y migraciones
     └── geo.ts               # Tipos: Coords, GeoPhoto, PermissionState
 ```
 

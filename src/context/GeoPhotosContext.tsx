@@ -1,20 +1,33 @@
 // src/context/GeoPhotosContext.tsx
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useState,
-  type ReactNode,
-} from 'react';
-import type { GeoPhoto } from '@/types/geo';
+import React, { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { GeoPhoto, Coords, PhotoSource } from '@/types/geo';
+import type { Album } from '@/db/schema';
+import { useGeoPhotosDB, type PhotoFilter } from '@/hooks/useGeoPhotosDB';
+import { useAlbumsDB } from '@/hooks/useAlbumsDB';
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
 
+export interface AddPhotoParams {
+  uri: string;
+  coords: Coords | null;
+  source: PhotoSource;
+  albumId?: number | null;
+  notes?: string | null;
+}
+
 interface GeoPhotosContextValue {
   photos: GeoPhoto[];
-  addPhoto: (photo: GeoPhoto) => void;
-  removePhoto: (id: string) => void;
-  clearAll: () => void;
+  albums: Album[];
+  filter: PhotoFilter;
+  setFilter: (f: PhotoFilter) => void;
+  addPhoto: (params: AddPhotoParams) => Promise<void>;
+  removePhoto: (id: number) => Promise<void>;
+  clearAll: () => Promise<void>;
+  updateNotes: (id: number, notes: string) => Promise<void>;
+  toggleFavorite: (id: number, isFavorite: boolean) => Promise<void>;
+  setAlbum: (id: number, albumId: number | null) => Promise<void>;
+  createAlbum: (name: string, description?: string) => Promise<Album>;
+  removeAlbum: (id: number) => Promise<void>;
 }
 
 // ─── Contexto ─────────────────────────────────────────────────────────────────
@@ -24,35 +37,70 @@ const GeoPhotosContext = createContext<GeoPhotosContextValue | undefined>(undefi
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 /**
- * GeoPhotosProvider: provee el estado global de fotos geolocalizadas.
+ * GeoPhotosProvider: Conecta la capa de presentación (UI) con la capa de
+ * datos persistente mediante SQLite, Drizzle ORM y FileSystem.
  *
- * Reglas aplicadas:
- *  - useState en Top-Level
- *  - Inmutabilidad estricta: nunca se muta el array directamente
- *    addPhoto:    [...prev, photo]           → nueva referencia
- *    removePhoto: prev.filter(...)           → nueva referencia
- *    clearAll:    []                         → nueva referencia vacía
+ * Flujo de arquitectura de 5 capas:
+ * Pantalla (UI) -> useGeoPhotos (Hook) -> Repositorios -> Drizzle/Esquema -> expo-sqlite
  */
 export function GeoPhotosProvider({ children }: { children: ReactNode }) {
-  // Las fotos más recientes aparecen primero (addPhoto prepend con spread)
-  const [photos, setPhotos] = useState<GeoPhoto[]>([]);
+  const {
+    photos: rawPhotos,
+    filter,
+    setFilter,
+    addPhoto: addPhotoDB,
+    removePhoto,
+    clearAll,
+    updateNotes,
+    toggleFavorite,
+    setAlbum,
+  } = useGeoPhotosDB();
 
-  const addPhoto = useCallback((photo: GeoPhoto) => {
-    // Inmutabilidad: spread crea nueva referencia — la foto nueva va al frente
-    setPhotos((prev) => [photo, ...prev]);
-  }, []);
+  const { albums, createAlbum, removeAlbum } = useAlbumsDB();
 
-  const removePhoto = useCallback((id: string) => {
-    // Inmutabilidad: filter devuelve un nuevo array
-    setPhotos((prev) => prev.filter((p) => p.id !== id));
-  }, []);
+  // Mapear de entidad de SQLite (Drizzle) a modelo de interfaz GeoPhoto
+  const photos: GeoPhoto[] = useMemo(() => {
+    return rawPhotos.map((p) => ({
+      id: p.id,
+      uri: p.uri,
+      coords:
+        p.latitude !== null && p.longitude !== null
+          ? {
+              latitude: p.latitude,
+              longitude: p.longitude,
+              accuracy: p.accuracy,
+              altitude: p.altitude,
+            }
+          : null,
+      source: p.source,
+      albumId: p.albumId,
+      notes: p.notes,
+      isFavorite: Boolean(p.isFavorite),
+      createdAt: p.createdAt,
+    }));
+  }, [rawPhotos]);
 
-  const clearAll = useCallback(() => {
-    setPhotos([]);
-  }, []);
+  const addPhoto = async (params: AddPhotoParams) => {
+    await addPhotoDB(params);
+  };
+
+  const value: GeoPhotosContextValue = {
+    photos,
+    albums,
+    filter,
+    setFilter,
+    addPhoto,
+    removePhoto,
+    clearAll,
+    updateNotes,
+    toggleFavorite,
+    setAlbum,
+    createAlbum,
+    removeAlbum,
+  };
 
   return (
-    <GeoPhotosContext.Provider value={{ photos, addPhoto, removePhoto, clearAll }}>
+    <GeoPhotosContext.Provider value={value}>
       {children}
     </GeoPhotosContext.Provider>
   );
@@ -61,8 +109,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
 // ─── Custom Hook de acceso ─────────────────────────────────────────────────────
 
 /**
- * useGeoPhotos: hook de acceso seguro al contexto.
- * Lanza error descriptivo si se usa fuera del Provider.
+ * useGeoPhotos: hook de acceso seguro al contexto persistente.
  */
 export function useGeoPhotos(): GeoPhotosContextValue {
   const ctx = useContext(GeoPhotosContext);

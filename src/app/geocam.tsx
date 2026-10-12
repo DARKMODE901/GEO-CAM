@@ -51,12 +51,10 @@ export default function GeoCamScreen() {
     const coords =
       geo.permission === 'granted' ? geo.coords ?? (await geo.getCurrent()) : null;
 
-    addPhoto({
-      id: String(Date.now()),
+    await addPhoto({
       uri: photo.uri,
       coords,
       source: 'camera',
-      createdAt: Date.now(),
     });
   };
 
@@ -71,12 +69,10 @@ export default function GeoCamScreen() {
       const coords =
         geo.permission === 'granted' ? geo.coords ?? (await geo.getCurrent()) : null;
 
-      addPhoto({
-        id: String(Date.now()),
+      await addPhoto({
         uri: result.assets[0].uri,
         coords,
         source: 'gallery',
-        createdAt: Date.now(),
       });
     }
   };

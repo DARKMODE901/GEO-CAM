@@ -13,9 +13,12 @@ export interface Coords {
 export type PhotoSource = 'camera' | 'gallery';
 
 export interface GeoPhoto {
-  id: string;
+  id: number;
   uri: string;
   coords: Coords | null;
   source: PhotoSource;
+  albumId?: number | null;
+  notes?: string | null;
+  isFavorite: boolean;
   createdAt: number;
 }
