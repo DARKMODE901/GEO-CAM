@@ -1,4 +1,4 @@
-ALTER TABLE photos ADD COLUMN client_id TEXT NOT NULL DEFAULT (lower(hex(randomblob(16))));
+ALTER TABLE photos ADD COLUMN client_id TEXT DEFAULT '';
 --> statement-breakpoint
 ALTER TABLE photos ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
 --> statement-breakpoint
