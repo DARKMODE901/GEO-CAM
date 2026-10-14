@@ -20,7 +20,7 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 ### ☁️ Semana 8: Backend as a Service con Supabase (Auth, RLS, Storage y Sync)
 
-#### 🔹 Autenticación, Validaciones y Manejo de Errores
+#### 🔹 1. Autenticación, Validaciones y Manejo de Errores
 <table>
   <tr>
     <td align="center" width="25%">
@@ -46,13 +46,44 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
   </tr>
 </table>
 
-#### 🔹 Sesión Persistente, Aislamiento por Usuario y Estado Local / Nube
+#### 🔹 2. Sincronización Local ↔ Nube y Subida Binaria a Storage
 <table>
   <tr>
-    <td align="center" width="35%">
+    <td align="center" width="33%">
       <img src="screenshots/20-galeria-sesion-sync-local.png" width="220" /><br/>
-      <b>👤 Sesión Activa y Estado de Sincronización</b><br/>
-      <sub>Cabecera con email de usuario autenticado (<code>prueba@gmail.com</code>), botón <b>Salir</b>, métricas en vivo (<code>1 en SQLite • 0 en Nube</code>), badge <span style="background-color:#555;padding:2px 6px;border-radius:4px;">📱 Local</span> y botón individual <b>☁️ Subir a Nube</b>.</sub>
+      <b>📱 Estado Local (Pendiente)</b><br/>
+      <sub>Foto capturada en SQLite con badge <code>📱 Local</code>, métricas (<code>1 en SQLite • 0 en Nube</code>) y botón individual para subir.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/22-sync-individual-exitosa.png" width="220" /><br/>
+      <b>☁️ Sincronización Exitosa</b><br/>
+      <sub>Subida binaria con <code>ArrayBuffer</code> (evita 0 bytes). Badge actualizado a <code>☁️✓ Nube</code> y contador (<code>1 en SQLite • 1 en Nube</code>).</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/24-sync-todo-al-dia.png" width="220" /><br/>
+      <b>🔄 Sincronización Masiva (Al día)</b><br/>
+      <sub>Botón <code>☁️ Sync Todo</code>: verifica y notifica que todas las fotos locales ya están respaldadas en Supabase sin duplicar datos.</sub>
+    </td>
+  </tr>
+</table>
+
+#### 🔹 3. Pestaña Nube (Realtime + Storage Privado) y Cierre de Sesión Seguro
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/21-pestana-nube-vacia.png" width="220" /><br/>
+      <b>☁️ Pestaña Nube (Vacía)</b><br/>
+      <sub>Vista remota con WebSockets (Realtime) activos, contador de fotos respaldadas y botón de recarga manual.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/23-pestana-nube-foto-respaldada.png" width="220" /><br/>
+      <b>📁 Foto Respaldada en Storage Privado</b><br/>
+      <sub>Visualización por URL firmada temporal. Se observa la ruta estructurada por carpeta de usuario: <code>&lt;user_id&gt;/&lt;client_id&gt;.jpg</code>.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/25-auth-confirmacion-logout.png" width="220" /><br/>
+      <b>🚪 Cierre de Sesión Cifrado</b><br/>
+      <sub>Diálogo de confirmación para cerrar sesión en Supabase y limpiar de forma atómica los fragmentos en <code>SecureStore</code>.</sub>
     </td>
   </tr>
 </table>
