@@ -18,6 +18,45 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 ## 📱 Capturas de pantalla y Evidencias de Funcionamiento
 
+### ☁️ Semana 8: Backend as a Service con Supabase (Auth, RLS, Storage y Sync)
+
+#### 🔹 Autenticación, Validaciones y Manejo de Errores
+<table>
+  <tr>
+    <td align="center" width="25%">
+      <img src="screenshots/16-auth-validacion-campos.png" width="200" /><br/>
+      <b>⚠️ Validación de Campos</b><br/>
+      <sub>Alerta que solicita ingresar email y contraseña si los campos requeridos se dejan vacíos.</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="screenshots/17-auth-error-credenciales.png" width="200" /><br/>
+      <b>🚫 Manejo de Errores Supabase</b><br/>
+      <sub>Captura y presentación amigable de errores devueltos por la API de Supabase Auth (credenciales inválidas).</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="screenshots/18-auth-validacion-password.png" width="200" /><br/>
+      <b>🔒 Validación de Seguridad</b><br/>
+      <sub>Control preventivo de longitud mínima de 6 caracteres para contraseñas previo a la llamada a Supabase.</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="screenshots/19-auth-registro-exitoso.png" width="200" /><br/>
+      <b>✅ Registro y Confirmación</b><br/>
+      <sub>Flujo de registro completado exitosamente con mensaje informativo para confirmación de correo.</sub>
+    </td>
+  </tr>
+</table>
+
+#### 🔹 Sesión Persistente, Aislamiento por Usuario y Estado Local / Nube
+<table>
+  <tr>
+    <td align="center" width="35%">
+      <img src="screenshots/20-galeria-sesion-sync-local.png" width="220" /><br/>
+      <b>👤 Sesión Activa y Estado de Sincronización</b><br/>
+      <sub>Cabecera con email de usuario autenticado (<code>prueba@gmail.com</code>), botón <b>Salir</b>, métricas en vivo (<code>1 en SQLite • 0 en Nube</code>), badge <span style="background-color:#555;padding:2px 6px;border-radius:4px;">📱 Local</span> y botón individual <b>☁️ Subir a Nube</b>.</sub>
+    </td>
+  </tr>
+</table>
+
 ### 🗄️ Semana 7: Base de Datos Local Offline-First (SQLite + Drizzle ORM)
 
 #### 🔹 Galería Persistente, Favoritas y Relaciones
