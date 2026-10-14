@@ -162,4 +162,6 @@
 6. **Ruta estricta de Storage:** Las imágenes se guardan bajo `${userId}/${photo.clientId}.jpg` en el bucket privado `'geocam'`, coincidiendo con las políticas RLS.
 7. **Integridad de migraciones Drizzle:** Se generó la migración 3 de forma incremental sin borrar la carpeta `drizzle/` ni regenerar las migraciones 1 y 2.
 8. **Limpieza estricta de canales Realtime:** Limpieza garantizada en el retorno de `useEffect` con `supabase.removeChannel(channel)`.
+9. **Expresiones no constantes en `ALTER TABLE` de SQLite en Android:** En Android, el motor nativo de SQLite rechaza expresiones dinámicas como `DEFAULT (lower(hex(randomblob(16))))` al añadir columnas con `ALTER TABLE ADD COLUMN`. Se corrigió utilizando el valor literal constante `DEFAULT ''` en `0002_add_sync_fields.sql` y delegando la asignación de UUIDs a la capa de aplicación mediante `photoRepository.ensureSyncFields()` y `Crypto.randomUUID()`.
+
 
