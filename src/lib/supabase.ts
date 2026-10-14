@@ -5,8 +5,14 @@ import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import { secureStorage } from './secureStorage';
 
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+const supabaseUrl =
+  process.env.EXPO_PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  '';
+const supabaseAnonKey =
+  process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  '';
 
 /**
  * Cliente de Supabase con:
