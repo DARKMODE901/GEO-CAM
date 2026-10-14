@@ -195,6 +195,130 @@ Detecta el gesto de agitar usando el acelerómetro (`expo-sensors`). Usa `useRef
 
 ---
 
+---
+
+## ☁️ Semana 8: Backend as a Service con Supabase
+
+En la Semana 8 se expandió **GeoCam** conectándola con **Supabase** como plataforma de Backend as a Service (BaaS), implementando autenticación con correo/contraseña, almacenamiento cifrado por fragmentos en el dispositivo, base de datos remota PostgreSQL protegida por usuario mediante *Row Level Security (RLS)*, subida de fotos físicas a un bucket privado en *Supabase Storage* y suscripción en tiempo real con *Realtime*.
+
+> **Principio de Diseño Offline-First:** SQLite con Drizzle ORM permanece como la **fuente de verdad local** en el dispositivo móvil, permitiendo un funcionamiento 100% autónomo sin conexión a internet. Supabase actúa como respaldo en la nube y punto de encuentro multi-dispositivo.
+
+```mermaid
+graph TD
+    UI["📱 Pantallas (Cámara, Mapa, Álbumes, Nube)"]
+    Context["🧠 GeoPhotosContext & AuthContext"]
+    LocalDB["🗄️ SQLite local (Drizzle ORM)"]
+    FileSystem["📂 FileSystem.documentDirectory (Fotos físicas locales)"]
+    SupaAuth["🔐 Supabase Auth (Cifrado con SecureStore chunked)"]
+    SupaDB["☁️ Supabase PostgreSQL (public.photos con RLS)"]
+    SupaStorage["🪣 Supabase Storage (Bucket privado 'geocam')"]
+    SupaRealtime["⚡ Supabase Realtime (WebSockets)"]
+
+    UI --> Context
+    Context --> LocalDB
+    Context --> FileSystem
+    Context --> SupaAuth
+    Context --> SupaDB
+    Context --> SupaStorage
+    SupaRealtime --> UI
+```
+
+### 📋 Características implementadas (Taller T1-T6 + Casa C1-C7)
+
+1. **Almacenamiento seguro por fragmentos (`lib/secureStorage.ts`):** Adaptador sobre `expo-secure-store` dividiendo tokens en bloques de 1000 bytes para superar la limitación nativa de 2048 bytes.
+2. **Cliente Supabase seguro (`lib/supabase.ts`):** Configurado con `autoRefreshToken: true`, `detectSessionInUrl: false` y listener del ciclo de vida de la app (`AppState`) para suspender el refresco de tokens en segundo plano.
+3. **Autenticación completa (`context/AuthContext.tsx`, `app/login.tsx`):** Registro e inicio de sesión con email/password, sesión persistente y cierre de sesión.
+4. **Navegación protegida declarativa (`app/_layout.tsx`):** Si no hay sesión activa, la app muestra la pantalla de login directamente, sin redirecciones forzadas ni parpadeos.
+5. **Migración incremental Drizzle (`0002_add_sync_fields.sql`):** Adición de `client_id` (UUID), `updated_at`, `remote_path`, `synced_at` y `owner_id` manteniendo intactas las migraciones previas.
+6. **Subida binaria con `ArrayBuffer` (`services/cloudPhotos.ts`):** Prevención de archivos de 0 bytes garantizando subidas consistentes en React Native.
+7. **Ruta estricta en Storage privado:** Fotos almacenadas bajo `${userId}/${clientId}.jpg` en el bucket privado `'geocam'`.
+8. **Visualización con URLs firmadas:** Generación de URLs temporales con expiración (`createSignedUrl`) para visualizar imágenes de buckets privados de forma segura.
+9. **Indicadores de estado de sincronización (`app/mapa.tsx`):**
+   - ☁️✓ **Nube:** Foto sincronizada sin cambios pendientes.
+   - ☁️⬆️ **Pendiente:** Foto modificada localmente pendiente de actualizar en la nube.
+   - 📱 **Local:** Foto almacenada solo en el dispositivo.
+10. **Sincronización masiva con progreso (`app/mapa.tsx`):** Botón `☁️ Sync Todo` con indicador en tiempo real ("Sincronizando X de Y...").
+11. **Pestaña Nube con Realtime (`app/nube.tsx`):** Visualización de fotos respaldadas en Supabase con suscripción activa por WebSockets y limpieza garantizada del canal (`supabase.removeChannel`).
+12. **Aislamiento multi-usuario:** Filtrado por `owner_id` para garantizar que en un mismo dispositivo cada usuario solo vea sus fotos locales.
+13. **Eliminación sincronizada:** Al eliminar una foto, se limpian el archivo local, el registro SQLite y el objeto en Supabase Storage/PostgreSQL.
+
+---
+
+### ⚙️ Configuración en el Panel de Supabase (SQL Requerido)
+
+Para desplegar la infraestructura en la nube, ejecuta el siguiente script en el **SQL Editor de Supabase**:
+
+```sql
+-- 1. Tabla remota de fotos
+create table public.photos (
+  id bigint generated always as identity primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  client_id uuid not null unique,
+  storage_path text not null unique,
+  latitude double precision,
+  longitude double precision,
+  note text,
+  favorite boolean not null default false,
+  source text not null check (source in ('camera', 'gallery')),
+  taken_at timestamptz not null,
+  updated_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+
+-- 2. Activar Row Level Security (RLS)
+alter table public.photos enable row level security;
+
+-- Políticas de la tabla photos (aislamiento estricto por usuario)
+create policy "ver las mías" on public.photos
+  for select to authenticated using ((select auth.uid()) = user_id);
+
+create policy "crear las mías" on public.photos
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+
+create policy "actualizar las mías" on public.photos
+  for update to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+create policy "borrar las mías" on public.photos
+  for delete to authenticated using ((select auth.uid()) = user_id);
+
+-- 3. Habilitar Realtime en la tabla photos
+alter publication supabase_realtime add table public.photos;
+
+-- 4. Crear bucket privado 'geocam' y sus políticas RLS
+insert into storage.buckets (id, name, public) values ('geocam', 'geocam', false);
+
+create policy "subir a mi carpeta" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "leer mi carpeta" on storage.objects
+  for select to authenticated
+  using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "actualizar mi carpeta" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+create policy "borrar de mi carpeta" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'geocam' and (storage.foldername(name))[1] = (select auth.uid()::text));
+```
+
+### 🔐 Variables de Entorno
+
+Crea un archivo `.env` en la raíz del proyecto (ignorado automáticamente por `.gitignore`):
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://TU_PROYECTO.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_anon_publishable_key
+```
+
+> ⚠️ **Seguridad:** Nunca utilices `SUPABASE_SERVICE_ROLE_KEY` en el cliente móvil. Únicamente se debe emplear la clave pública `anon`.
+
+---
+
 ## 🚀 Instalación y ejecución
 
 ```bash

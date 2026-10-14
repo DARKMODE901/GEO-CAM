@@ -1,9 +1,10 @@
 // src/context/GeoPhotosContext.tsx
 import React, { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { GeoPhoto, Coords, PhotoSource } from '@/types/geo';
+import type { GeoPhoto, Coords, PhotoSource, SyncStatus } from '@/types/geo';
 import type { Album } from '@/db/schema';
 import { useGeoPhotosDB, type PhotoFilter } from '@/hooks/useGeoPhotosDB';
 import { useAlbumsDB } from '@/hooks/useAlbumsDB';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ interface GeoPhotosContextValue {
   setAlbum: (id: number, albumId: number | null) => Promise<void>;
   createAlbum: (name: string, description?: string) => Promise<Album>;
   removeAlbum: (id: number) => Promise<void>;
+  syncPhoto: (id: number) => Promise<void>;
+  syncAllPhotos: (onProgress?: (current: number, total: number) => void) => Promise<{ synced: number; failed: number }>;
 }
 
 // ─── Contexto ─────────────────────────────────────────────────────────────────
@@ -38,12 +41,16 @@ const GeoPhotosContext = createContext<GeoPhotosContextValue | undefined>(undefi
 
 /**
  * GeoPhotosProvider: Conecta la capa de presentación (UI) con la capa de
- * datos persistente mediante SQLite, Drizzle ORM y FileSystem.
+ * datos persistente mediante SQLite, Drizzle ORM, FileSystem y Supabase Cloud Sync.
  *
- * Flujo de arquitectura de 5 capas:
+ * Flujo de arquitectura:
  * Pantalla (UI) -> useGeoPhotos (Hook) -> Repositorios -> Drizzle/Esquema -> expo-sqlite
+ *                                      -> Supabase Storage & PostgreSQL (Nube)
  */
 export function GeoPhotosProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const ownerId = user?.id ?? null;
+
   const {
     photos: rawPhotos,
     filter,
@@ -54,30 +61,49 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     updateNotes,
     toggleFavorite,
     setAlbum,
-  } = useGeoPhotosDB();
+    syncPhoto,
+    syncAllPhotos,
+  } = useGeoPhotosDB(ownerId);
 
   const { albums, createAlbum, removeAlbum } = useAlbumsDB();
 
-  // Mapear de entidad de SQLite (Drizzle) a modelo de interfaz GeoPhoto
+  // Mapear de entidad de SQLite (Drizzle) a modelo de interfaz GeoPhoto con syncStatus
   const photos: GeoPhoto[] = useMemo(() => {
-    return rawPhotos.map((p) => ({
-      id: p.id,
-      uri: p.uri,
-      coords:
-        p.latitude !== null && p.longitude !== null
-          ? {
-              latitude: p.latitude,
-              longitude: p.longitude,
-              accuracy: p.accuracy,
-              altitude: p.altitude,
-            }
-          : null,
-      source: p.source,
-      albumId: p.albumId,
-      notes: p.notes,
-      isFavorite: Boolean(p.isFavorite),
-      createdAt: p.createdAt,
-    }));
+    return rawPhotos.map((p) => {
+      let syncStatus: SyncStatus = 'local_only';
+      if (p.remotePath) {
+        if (p.updatedAt > (p.syncedAt ?? 0)) {
+          syncStatus = 'modified_pending';
+        } else {
+          syncStatus = 'synced';
+        }
+      }
+
+      return {
+        id: p.id,
+        clientId: p.clientId,
+        uri: p.uri,
+        coords:
+          p.latitude !== null && p.longitude !== null
+            ? {
+                latitude: p.latitude,
+                longitude: p.longitude,
+                accuracy: p.accuracy,
+                altitude: p.altitude,
+              }
+            : null,
+        source: p.source,
+        albumId: p.albumId,
+        notes: p.notes,
+        isFavorite: Boolean(p.isFavorite),
+        createdAt: p.createdAt,
+        updatedAt: p.updatedAt,
+        remotePath: p.remotePath,
+        syncedAt: p.syncedAt,
+        ownerId: p.ownerId,
+        syncStatus,
+      };
+    });
   }, [rawPhotos]);
 
   const addPhoto = async (params: AddPhotoParams) => {
@@ -97,6 +123,8 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     setAlbum,
     createAlbum,
     removeAlbum,
+    syncPhoto,
+    syncAllPhotos,
   };
 
   return (

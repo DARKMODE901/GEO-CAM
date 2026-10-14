@@ -102,3 +102,64 @@
 - **Foreign keys activadas:** Se añadió `expoDb.execSync('PRAGMA foreign_keys = ON;');` inmediatamente tras la apertura de la base de datos.
 - **`drizzle-kit push` evitado:** Se generaron migraciones versionadas en archivos `.sql` aplicadas en el dispositivo mediante el hook `useMigrations`.
 - **Expo SDK 57 FileSystem API:** En SDK 57 `expo-file-system` reestructuró sus exportaciones principales. El uso de `expo-file-system/legacy` permitió mantener la API `documentDirectory` compatible sin errores de TypeScript.
+
+---
+
+# Registro de Auditoría de IA – Semana 8
+
+**Estudiante(s):** Leonardo Carrillo Caballero  
+**Semana:** 8  
+**Proyecto:** GeoCam Cloud Backup (Backend as a Service con Supabase: Auth, PostgreSQL + RLS, Storage Privado y Realtime)
+
+---
+
+## 1. Prompts Utilizados
+
+- *"Implementa la integración completa de Supabase en GeoCam conectando Auth, PostgreSQL con RLS, Storage privado y Realtime, manteniendo SQLite y Drizzle como fuente de verdad local offline."*
+- *"Crea el adaptador por fragmentos en `src/lib/secureStorage.ts` sobre `expo-secure-store` para evitar el límite de 2048 bytes en sesiones de autenticación."*
+- *"Genera la migración 3 de Drizzle (`0002_add_sync_fields.sql`) agregando client_id, updated_at, remote_path, synced_at y owner_id sin romper la persistencia de Semana 7."*
+- *"Implementa el servicio `cloudPhotos.ts` usando ArrayBuffer para la subida de imágenes físicas y upsert de metadatos con signed URLs para el bucket privado."*
+- *"Crea la pestaña Nube (`nube.tsx`) con suscripción Realtime y limpieza estricta del canal en el desmontaje del componente."*
+- *"Añade badges de sincronización (`☁️✓ Nube`, `☁️⬆️ Pendiente`, `📱 Local`) y botón de sincronización masiva con progreso en `mapa.tsx`."*
+
+---
+
+## 2. Código Generado vs. Código Modificado
+
+### Almacenamiento Seguro por Fragmentos (`src/lib/secureStorage.ts`)
+- **¿Qué generó la IA?:** Un adaptador compatible con la interfaz de almacenamiento de `@supabase/supabase-js`, dividiendo los datos en bloques de `CHUNK_SIZE = 1000` bytes para `expo-secure-store`.
+- **¿Qué modifiqué/corregí?:** Verifiqué que `removeItem` limpiara todos los fragmentos `_chunk_i` y el contador `_chunk_count` para evitar dejar fragmentos huérfanos al cerrar sesión.
+
+### Cliente de Supabase (`src/lib/supabase.ts`)
+- **¿Qué generó la IA?:** Inicialización con `createClient` utilizando `process.env.EXPO_PUBLIC_SUPABASE_URL` y `process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, almacenamiento `secureStorage`, `autoRefreshToken: true`, `detectSessionInUrl: false` y listener de `AppState` para pausar y reanudar el refresco de tokens.
+- **¿Qué modifiqué/corregí?:** Se verificó que ninguna clave de rol de servicio (`service_role`) fuera incluida en el código del cliente.
+
+### Contexto de Autenticación y Pantalla de Acceso (`src/context/AuthContext.tsx`, `src/app/login.tsx`)
+- **¿Qué generó la IA?:** `AuthProvider` utilizando la API v2 de Supabase (`getSession`, `onAuthStateChange`, `signInWithPassword`, `signUp`, `signOut`) y pantalla `login.tsx` con soporte para login y registro con tema oscuro nativo.
+- **¿Qué modifiqué/corregí?:** Para la navegación protegida, en lugar de invocar `router.replace()`, se aplicó un renderizado condicional declarativo en `src/app/_layout.tsx` que muestra `LoginScreen` directamente cuando no hay sesión activa.
+
+### Migración Incremental Local (`src/drizzle/0002_add_sync_fields.sql`, `src/db/schema.ts`)
+- **¿Qué generó la IA?:** Archivo SQL de migración añadiendo columnas `client_id`, `updated_at`, `remote_path`, `synced_at` y `owner_id`. Se registró en `_journal.json` y `migrations.js`.
+- **¿Qué modifiqué/corregí?:** Se preservó intacta la carpeta `drizzle/` existente de Semana 7 para evitar el error `table photos already exists` en clientes existentes.
+
+### Servicio de Fotos en la Nube (`src/services/cloudPhotos.ts`)
+- **¿Qué generó la IA?:** Funciones `uploadPhoto`, `upsertPhotoMetadata`, `fetchRemotePhotos`, `getSignedUrl` y `deleteCloudPhoto`.
+- **¿Qué modifiqué/corregí?:** Se aseguró el uso de `ArrayBuffer` mediante `await (await fetch(localUri)).arrayBuffer()` en lugar de `Blob` o `FormData`, garantizando que no se suban archivos vacíos de 0 bytes en React Native.
+
+### Pestaña Nube y Realtime (`src/app/nube.tsx`, `src/components/app-tabs.tsx`)
+- **¿Qué generó la IA?:** Pantalla de galería remota con URLs firmadas (para el bucket privado `geocam`), refresco con `RefreshControl` y canal de Realtime escuchando eventos `postgres_changes` en `public.photos`.
+- **¿Qué modifiqué/corregí?:** Se añadió `supabase.removeChannel(channel)` en la función de limpieza del `useEffect` para evitar fugas de memoria y reconexiones duplicadas.
+
+---
+
+## 3. Alucinaciones o Errores Detectados / Evitados (Reglas de Oro Semana 8)
+
+1. **Evitar claves secretas en el cliente:** Solo se utilizaron variables públicas `EXPO_PUBLIC_*`. Se aseguró la presencia de `.env` en `.gitignore` y se suministró `.env.example`.
+2. **Evitar AsyncStorage y SecureStore directo:** Se implementó `secureStorage.ts` con fragmentación de 1000 bytes para solventar la limitación de 2048 bytes de iOS Keychain y Android KeyStore.
+3. **Evitar métodos obsoletos de Supabase:** Se emplearon exclusivamente métodos de Supabase JS v2 (`supabase.auth.getSession()`, `supabase.auth.onAuthStateChange()`).
+4. **Evitar `router.replace()` para navegación de autenticación:** La navegación de login se gestiona de forma reactiva y declarativa dentro de `_layout.tsx`.
+5. **Evitar `Blob` y `FormData` en subidas nativas:** En React Native `Blob` genera archivos corruptos de 0 bytes en Supabase Storage; se utilizó estrictamente `ArrayBuffer`.
+6. **Ruta estricta de Storage:** Las imágenes se guardan bajo `${userId}/${photo.clientId}.jpg` en el bucket privado `'geocam'`, coincidiendo con las políticas RLS.
+7. **Integridad de migraciones Drizzle:** Se generó la migración 3 de forma incremental sin borrar la carpeta `drizzle/` ni regenerar las migraciones 1 y 2.
+8. **Limpieza estricta de canales Realtime:** Limpieza garantizada en el retorno de `useEffect` con `supabase.removeChannel(channel)`.
+

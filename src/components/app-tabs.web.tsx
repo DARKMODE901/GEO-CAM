@@ -33,6 +33,9 @@ export default function AppTabs() {
           <TabTrigger name="explore" href="/explore" asChild>
             <TabButton>📁 Álbumes</TabButton>
           </TabTrigger>
+          <TabTrigger name="nube" href={"/nube" as any} asChild>
+            <TabButton>☁️ Nube</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

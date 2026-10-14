@@ -47,6 +47,15 @@ export default function AppTabs() {
           renderingMode="template"
         />
       </NativeTabs.Trigger>
+
+      {/* Nube / Supabase (Semana 8) */}
+      <NativeTabs.Trigger name="nube">
+        <NativeTabs.Trigger.Label>Nube</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/cloud.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

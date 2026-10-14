@@ -15,6 +15,13 @@
       "when": 1791780501251,
       "tag": "0001_add_notes_and_favorites",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1791780600000,
+      "tag": "0002_add_sync_fields",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 // src/db/schema.ts
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
+import * as Crypto from 'expo-crypto';
 
 /**
  * Tabla de Álbumes
@@ -14,10 +15,11 @@ export const albums = sqliteTable('albums', {
 
 /**
  * Tabla de Fotos con metadatos y geolocalización
- * Incluye campos agregados en la Migración 2: notes y isFavorite
+ * Incluye campos de persistencia offline (Semana 7) y sincronización con Supabase (Semana 8)
  */
 export const photos = sqliteTable('photos', {
   id: integer('id').primaryKey({ autoIncrement: true }),
+  clientId: text('client_id').notNull().$defaultFn(() => Crypto.randomUUID()),
   uri: text('uri').notNull(), // Ruta física permanente en FileSystem.documentDirectory
   latitude: real('latitude'),
   longitude: real('longitude'),
@@ -28,6 +30,11 @@ export const photos = sqliteTable('photos', {
   notes: text('notes'), // Agregado en Migración 2
   isFavorite: integer('is_favorite').default(0).notNull(), // Agregado en Migración 2 (0 = false, 1 = true)
   createdAt: integer('created_at').notNull(),
+  // Campos de sincronización con Supabase (Migración 3 - Semana 8)
+  updatedAt: integer('updated_at').default(0).notNull(),
+  remotePath: text('remote_path'),
+  syncedAt: integer('synced_at'),
+  ownerId: text('owner_id'),
 });
 
 /**
