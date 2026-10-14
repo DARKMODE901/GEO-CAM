@@ -51,14 +51,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Restaurar sesión persistida al montar
+    // Restaurar sesión persistida al montar con timeout de seguridad (2.5s)
     const restoreSession = async () => {
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const getSessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise<any>((resolve) =>
+          setTimeout(() => resolve({ data: { session: null } }), 2500)
+        );
+        const { data } = await Promise.race([getSessionPromise, timeoutPromise]);
+        const currentSession = data?.session ?? null;
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
       } catch (error) {
-        console.error('Error restaurando sesión:', error);
+        console.warn('Error restaurando sesión:', error);
       } finally {
         setLoading(false);
       }

@@ -2,6 +2,7 @@
 // Layout raíz con SQLite Migrations (Semana 7) y Supabase Auth Guard (Semana 8)
 // REGLA 5: Renderizado condicional declarativo para el estado de autenticación (NO router.replace)
 
+import React, { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme, View, Text, ActivityIndicator } from 'react-native';
@@ -39,7 +40,6 @@ function MainContent() {
   // Usuario autenticado: acceso a toda la aplicación con SQLite y Supabase
   return (
     <GeoPhotosProvider>
-      <AnimatedSplashOverlay />
       <AppTabs />
     </GeoPhotosProvider>
   );
@@ -48,6 +48,12 @@ function MainContent() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { success, error } = useMigrations(db, migrations);
+
+  useEffect(() => {
+    if (error) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [error]);
 
   if (error) {
     return (
@@ -74,6 +80,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AuthProvider>
+        <AnimatedSplashOverlay />
         <MainContent />
       </AuthProvider>
     </ThemeProvider>
