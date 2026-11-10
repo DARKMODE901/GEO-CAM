@@ -16,7 +16,9 @@ const SHAKE_COOLDOWN_MS = 1500; // ms entre detecciones para evitar doble dispar
 export function useShake(onShake: () => void): void {
   // Guarda siempre la última versión del callback para evitar stale closures
   const callbackRef = useRef(onShake);
-  callbackRef.current = onShake;
+  useEffect(() => {
+    callbackRef.current = onShake;
+  }, [onShake]);
 
   // Persiste el timestamp de la última detección sin causar re-renders
   const lastShakeRef = useRef<number>(0);

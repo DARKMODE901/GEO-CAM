@@ -9,7 +9,17 @@ import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { PermissionPrimer } from '@/components/PermissionPrimer';
 
 export default function GeoCamScreen() {
-  const cam = useCamera();
+  const {
+    cameraRef,
+    facing,
+    permissionState,
+    isCapturing,
+    requestPermission,
+    openSettings,
+    toggleFacing,
+    takePhoto,
+    onCameraReady,
+  } = useCamera();
   const geo = useGeoLocation({ watch: true });
   const { photos, addPhoto, clearAll } = useGeoPhotos();
   const lastPhoto = photos[0] ?? null;
@@ -27,24 +37,24 @@ export default function GeoCamScreen() {
     );
   });
 
-  if (cam.permissionState === 'checking') {
+  if (permissionState === 'checking') {
     return <View style={styles.container} />;
   }
 
-  if (cam.permissionState !== 'granted') {
+  if (permissionState !== 'granted') {
     return (
       <PermissionPrimer
         title="Permiso de Cámara"
         description="GeoCam necesita acceso a tu cámara para tomar fotos geolocalizadas."
-        state={cam.permissionState}
-        onRequest={cam.requestPermission}
-        onOpenSettings={cam.openSettings}
+        state={permissionState}
+        onRequest={requestPermission}
+        onOpenSettings={openSettings}
       />
     );
   }
 
   const handleCapture = async () => {
-    const photo = await cam.takePhoto();
+    const photo = await takePhoto();
     if (!photo) return;
 
     // Degradación elegante: sin permiso de ubicación, coords queda en null
@@ -81,10 +91,10 @@ export default function GeoCamScreen() {
     <View style={styles.container}>
       {/* CameraView sin hijos: los controles van como hermanos absolutos */}
       <CameraView
-        ref={cam.cameraRef}
+        ref={cameraRef}
         style={StyleSheet.absoluteFill}
-        facing={cam.facing}
-        onCameraReady={cam.onCameraReady}
+        facing={facing}
+        onCameraReady={onCameraReady}
       />
 
       {/* Banner de ubicación: pedir en contexto sin bloquear la cámara */}
@@ -140,14 +150,14 @@ export default function GeoCamScreen() {
 
         {/* Botón de disparo */}
         <Pressable
-          style={[styles.shutterBtn, cam.isCapturing && { opacity: 0.5 }]}
+          style={[styles.shutterBtn, isCapturing && { opacity: 0.5 }]}
           onPress={handleCapture}
-          disabled={cam.isCapturing}
+          disabled={isCapturing}
         />
 
         {/* Botón girar cámara + botón extra galería */}
         <View style={styles.rightActions}>
-          <Pressable style={styles.secondaryBtn} onPress={cam.toggleFacing}>
+          <Pressable style={styles.secondaryBtn} onPress={toggleFacing}>
             <Text style={styles.btnText}>↻</Text>
           </Pressable>
           <Pressable style={styles.secondaryBtn} onPress={handlePickGallery}>

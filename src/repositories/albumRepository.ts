@@ -1,7 +1,7 @@
 // src/repositories/albumRepository.ts
 import { eq, desc } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { albums, type Album, type NewAlbum } from '@/db/schema';
+import { albums, type Album } from '@/db/schema';
 
 /**
  * Repositorio de Álbumes (Capa 3 de la Arquitectura de 5 capas)

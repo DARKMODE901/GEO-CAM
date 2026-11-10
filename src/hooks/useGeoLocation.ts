@@ -1,7 +1,7 @@
 // src/hooks/useGeoLocation.ts
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
-import { Linking, Platform } from 'react-native';
+import { Linking } from 'react-native';
 import type { Coords, PermissionState } from '@/types/geo';
 
 interface UseGeoLocationOptions {
