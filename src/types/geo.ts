@@ -28,5 +28,6 @@ export interface GeoPhoto {
   remotePath?: string | null;
   syncedAt?: number | null;
   ownerId?: string | null;
+  deletedAt?: number | null;
   syncStatus: SyncStatus;
 }

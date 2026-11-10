@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { clearPersistedQueryCache } from '@/lib/queryClient';
 
 // ─── Tipos del contexto de autenticación ──────────────────────────────────────
 
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async (): Promise<void> => {
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
+    await clearPersistedQueryCache();
   };
 
   // ── Valor del contexto ────────────────────────────────────────────────────

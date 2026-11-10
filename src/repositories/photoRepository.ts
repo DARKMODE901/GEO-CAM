@@ -1,33 +1,48 @@
 // src/repositories/photoRepository.ts
-import { eq, desc, and, or, isNull } from 'drizzle-orm';
+import { eq, desc, asc, and, or, isNull, lt } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { photos, type Photo, type NewPhoto } from '@/db/schema';
-import { deletePhysicalPhoto, deleteAllPhysicalPhotos } from '@/services/photoStorage';
-import { deleteCloudPhoto } from '@/services/cloudPhotos';
 import * as Crypto from 'expo-crypto';
+
+export interface SyncPendingCounts {
+  totalPending: number;
+  pendingUploads: number;
+  pendingDeletes: number;
+  syncedCount: number;
+  totalActive: number;
+}
+
+/**
+ * Determina si un registro local está pendiente de sincronizar.
+ * Regla de negocio: syncedAt es null o es anterior a updatedAt.
+ */
+export function isPhotoPendingSync(photo: Pick<Photo, 'syncedAt' | 'updatedAt'>): boolean {
+  return photo.syncedAt === null || photo.syncedAt < photo.updatedAt;
+}
 
 /**
  * Repositorio de Fotos (Capa 3 de la Arquitectura de 5 capas)
- * Encapsula todo el acceso a datos para la entidad Photo, coordina la eliminación física
- * y maneja el estado de sincronización local/nube.
+ * SQLite es la fuente de verdad absoluta: las escrituras son locales e instantáneas.
+ * PROHIBIDO ejecutar comandos SQL DELETE directos: siempre se usa borrado lógico (deletedAt).
  */
 export const photoRepository = {
   /**
-   * Obtiene todas las fotos, opcionalmente filtradas por ownerId (C5 - Multi-usuario).
+   * Obtiene todas las fotos activas (deletedAt IS NULL), filtradas por ownerId.
    */
   async getAll(ownerId?: string | null): Promise<Photo[]> {
+    const activeFilter = isNull(photos.deletedAt);
     if (ownerId) {
       return db
         .select()
         .from(photos)
-        .where(or(eq(photos.ownerId, ownerId), isNull(photos.ownerId)))
+        .where(and(activeFilter, or(eq(photos.ownerId, ownerId), isNull(photos.ownerId))))
         .orderBy(desc(photos.createdAt));
     }
-    return db.select().from(photos).orderBy(desc(photos.createdAt));
+    return db.select().from(photos).where(activeFilter).orderBy(desc(photos.createdAt));
   },
 
   /**
-   * Obtiene una foto por su ID.
+   * Obtiene una foto por su ID local.
    */
   async getById(id: number): Promise<Photo | undefined> {
     const results = await db.select().from(photos).where(eq(photos.id, id)).limit(1);
@@ -35,26 +50,92 @@ export const photoRepository = {
   },
 
   /**
-   * Obtiene todas las fotos de un álbum específico.
+   * Busca una foto local por su clientId (UUID compartido), incluyendo tombstones (borrado lógico).
+   */
+  async getByClientId(clientId: string): Promise<Photo | undefined> {
+    const results = await db
+      .select()
+      .from(photos)
+      .where(eq(photos.clientId, clientId))
+      .limit(1);
+    return results[0];
+  },
+
+  /**
+   * Obtiene todas las fotos activas de un álbum específico.
    */
   async getByAlbum(albumId: number, ownerId?: string | null): Promise<Photo[]> {
+    const activeAlbumFilter = and(eq(photos.albumId, albumId), isNull(photos.deletedAt));
     if (ownerId) {
       return db
         .select()
         .from(photos)
-        .where(and(eq(photos.albumId, albumId), or(eq(photos.ownerId, ownerId), isNull(photos.ownerId))))
+        .where(and(activeAlbumFilter, or(eq(photos.ownerId, ownerId), isNull(photos.ownerId))))
         .orderBy(desc(photos.createdAt));
     }
     return db
       .select()
       .from(photos)
-      .where(eq(photos.albumId, albumId))
+      .where(activeAlbumFilter)
       .orderBy(desc(photos.createdAt));
   },
 
   /**
+   * Obtiene todas las fotos pendientes de subir (activas o borradas lógicamente).
+   * Pendiente: syncedAt IS NULL o syncedAt < updatedAt.
+   */
+  async getPendingSync(ownerId: string): Promise<Photo[]> {
+    return db
+      .select()
+      .from(photos)
+      .where(
+        and(
+          or(eq(photos.ownerId, ownerId), isNull(photos.ownerId)),
+          or(isNull(photos.syncedAt), lt(photos.syncedAt, photos.updatedAt))
+        )
+      )
+      .orderBy(asc(photos.updatedAt));
+  },
+
+  /**
+   * Calcula estadísticas locales de sincronización para el Monitor de Estado UI.
+   */
+  async getSyncStats(ownerId: string): Promise<SyncPendingCounts> {
+    const rows = await db
+      .select()
+      .from(photos)
+      .where(or(eq(photos.ownerId, ownerId), isNull(photos.ownerId)));
+
+    let pendingUploads = 0;
+    let pendingDeletes = 0;
+    let syncedCount = 0;
+    let totalActive = 0;
+
+    for (const p of rows) {
+      const pending = isPhotoPendingSync(p);
+      if (p.deletedAt !== null) {
+        if (pending) pendingDeletes++;
+      } else {
+        totalActive++;
+        if (pending) {
+          pendingUploads++;
+        } else {
+          syncedCount++;
+        }
+      }
+    }
+
+    return {
+      totalPending: pendingUploads + pendingDeletes,
+      pendingUploads,
+      pendingDeletes,
+      syncedCount,
+      totalActive,
+    };
+  },
+
+  /**
    * Inserta un nuevo registro de foto en SQLite.
-   * La URI ya debe ser la ruta permanente en documentDirectory.
    */
   async create(data: Omit<NewPhoto, 'id'>): Promise<Photo> {
     const clientId = data.clientId || Crypto.randomUUID();
@@ -64,21 +145,99 @@ export const photoRepository = {
       .values({
         ...data,
         clientId,
-        updatedAt: now,
+        updatedAt: data.updatedAt ?? now,
+        deletedAt: data.deletedAt ?? null,
       })
       .returning();
     return created;
   },
 
   /**
-   * Actualiza las notas de una foto y actualiza el timestamp updatedAt.
+   * Inserta una foto descargada desde Supabase durante la fase Pull.
+   * Iguala syncedAt exactamente con updatedAt remoto para no quedar pendiente.
+   */
+  async createFromRemote(data: {
+    clientId: string;
+    uri: string;
+    latitude: number | null;
+    longitude: number | null;
+    source: 'camera' | 'gallery';
+    notes: string | null;
+    isFavorite: boolean;
+    createdAtMs: number;
+    remoteUpdatedAtMs: number;
+    remotePath: string;
+    ownerId: string;
+    deletedAtMs?: number | null;
+  }): Promise<Photo> {
+    const [created] = await db
+      .insert(photos)
+      .values({
+        clientId: data.clientId,
+        uri: data.uri,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        accuracy: null,
+        altitude: null,
+        source: data.source,
+        albumId: null,
+        notes: data.notes,
+        isFavorite: data.isFavorite ? 1 : 0,
+        createdAt: data.createdAtMs,
+        updatedAt: data.remoteUpdatedAtMs,
+        syncedAt: data.remoteUpdatedAtMs,
+        remotePath: data.remotePath,
+        ownerId: data.ownerId,
+        deletedAt: data.deletedAtMs ?? null,
+      })
+      .returning();
+    return created;
+  },
+
+  /**
+   * Aplica cambios remotos cuando remoteWins(localUpdatedAt, remoteUpdatedAt) es true.
+   * Iguala las fechas locales (updatedAt y syncedAt) al updated_at remoto.
+   */
+  async applyRemoteUpdate(
+    id: number,
+    data: {
+      uri?: string;
+      latitude: number | null;
+      longitude: number | null;
+      notes: string | null;
+      isFavorite: boolean;
+      remotePath: string;
+      ownerId: string;
+      remoteUpdatedAtMs: number;
+      deletedAtMs: number | null;
+    }
+  ): Promise<void> {
+    await db
+      .update(photos)
+      .set({
+        ...(data.uri ? { uri: data.uri } : {}),
+        latitude: data.latitude,
+        longitude: data.longitude,
+        notes: data.notes,
+        isFavorite: data.isFavorite ? 1 : 0,
+        remotePath: data.remotePath,
+        ownerId: data.ownerId,
+        updatedAt: data.remoteUpdatedAtMs,
+        syncedAt: data.remoteUpdatedAtMs,
+        deletedAt: data.deletedAtMs,
+      })
+      .where(eq(photos.id, id));
+  },
+
+  /**
+   * Actualiza las notas de una foto y actualiza updatedAt.
    */
   async updateNotes(id: number, notes: string): Promise<void> {
     await db.update(photos).set({ notes, updatedAt: Date.now() }).where(eq(photos.id, id));
   },
 
   /**
-   * Alterna favorita y actualiza el timestamp updatedAt.
+   * Alterna favorita y actualiza updatedAt.
    */
   async toggleFavorite(id: number, isFavorite: boolean): Promise<void> {
     await db
@@ -88,21 +247,27 @@ export const photoRepository = {
   },
 
   /**
-   * Asigna o cambia el álbum de una foto y actualiza el timestamp updatedAt.
+   * Asigna o cambia el álbum de una foto y actualiza updatedAt.
    */
   async setAlbum(id: number, albumId: number | null): Promise<void> {
     await db.update(photos).set({ albumId, updatedAt: Date.now() }).where(eq(photos.id, id));
   },
 
   /**
-   * Marca una foto como sincronizada con Supabase.
+   * Marca una foto como sincronizada reemplazando syncedAt EXACTAMENTE con el valor
+   * updatedAt que se acaba de subir (jamás usa la fecha actual del reloj).
    */
-  async markSynced(id: number, remotePath: string, syncedAt: number, ownerId?: string): Promise<void> {
+  async markSynced(
+    id: number,
+    remotePath: string | null,
+    uploadedUpdatedAt: number,
+    ownerId?: string
+  ): Promise<void> {
     await db
       .update(photos)
       .set({
-        remotePath,
-        syncedAt,
+        ...(remotePath !== null ? { remotePath } : {}),
+        syncedAt: uploadedUpdatedAt,
         ...(ownerId ? { ownerId } : {}),
       })
       .where(eq(photos.id, id));
@@ -114,43 +279,64 @@ export const photoRepository = {
   async ensureSyncFields(): Promise<void> {
     const all = await db.select().from(photos);
     for (const p of all) {
-      if (!p.clientId || p.clientId.trim() === '') {
+      if (!p.clientId || p.clientId.trim() === '' || !p.updatedAt) {
         await db
           .update(photos)
-          .set({ clientId: Crypto.randomUUID(), updatedAt: p.createdAt })
+          .set({
+            clientId:
+              p.clientId && p.clientId.trim() !== '' ? p.clientId : Crypto.randomUUID(),
+            updatedAt: p.updatedAt && p.updatedAt > 0 ? p.updatedAt : p.createdAt,
+          })
           .where(eq(photos.id, p.id));
       }
     }
   },
 
   /**
-   * Elimina una foto de la base de datos local, su archivo físico y opcionalmente de Supabase (C3).
+   * Borrado lógico de una foto por ID local.
+   * Marca deletedAt y updatedAt con la fecha actual; los archivos físicos y remotos
+   * se eliminarán únicamente cuando la marca de borrado sea confirmada en Push.
    */
-  async delete(id: number, deleteFromCloud = true): Promise<void> {
-    const photo = await this.getById(id);
-    if (photo) {
-      // 1. Eliminar de la nube si está sincronizada y se solicitó
-      if (deleteFromCloud && photo.remotePath && photo.clientId) {
-        try {
-          await deleteCloudPhoto(photo.remotePath, photo.clientId);
-        } catch (cloudErr) {
-          console.warn('[photoRepository] Error al eliminar de la nube:', cloudErr);
-        }
-      }
-      // 2. Eliminar archivo físico
-      await deletePhysicalPhoto(photo.uri);
-      // 3. Eliminar registro en SQLite
-      await db.delete(photos).where(eq(photos.id, id));
-    }
+  async delete(id: number): Promise<void> {
+    const now = Date.now();
+    await db
+      .update(photos)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(photos.id, id));
   },
 
   /**
-   * Elimina todas las fotos de la base de datos y todos sus archivos físicos.
+   * Borrado lógico de una foto por clientId.
    */
-  async deleteAll(): Promise<void> {
-    // 1. Eliminar archivos físicos
-    await deleteAllPhysicalPhotos();
-    // 2. Eliminar registros en SQLite
-    await db.delete(photos);
+  async deleteByClientId(clientId: string): Promise<void> {
+    const now = Date.now();
+    await db
+      .update(photos)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(photos.clientId, clientId));
+  },
+
+  /**
+   * Borrado lógico masivo de todas las fotos activas (sin comandos SQL DELETE).
+   */
+  async deleteAll(ownerId?: string | null): Promise<void> {
+    const now = Date.now();
+    const condition = ownerId
+      ? and(isNull(photos.deletedAt), or(eq(photos.ownerId, ownerId), isNull(photos.ownerId)))
+      : isNull(photos.deletedAt);
+
+    await db
+      .update(photos)
+      .set({
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(condition);
   },
 };

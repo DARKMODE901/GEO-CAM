@@ -15,11 +15,23 @@ ALTER TABLE photos ADD COLUMN synced_at INTEGER;
 --> statement-breakpoint
 ALTER TABLE photos ADD COLUMN owner_id TEXT;`;
 
+const m0003 = `ALTER TABLE photos ADD COLUMN deleted_at INTEGER;
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_photos_client_id ON photos (client_id);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_photos_deleted_at ON photos (deleted_at);`;
+
 export default {
   journal,
   migrations: {
     m0000,
     m0001,
     m0002,
+    m0003,
   },
 };

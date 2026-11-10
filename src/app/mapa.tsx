@@ -16,6 +16,8 @@ import {
 } from 'react-native';
 import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useAuth } from '@/context/AuthContext';
+import { useNetworkOnline } from '@/hooks/useNetworkOnline';
+import { SyncMonitorModal } from '@/components/SyncMonitorModal';
 import type { GeoPhoto } from '@/types/geo';
 
 function getStaticMapUrl(lat: number, lng: number): string {
@@ -30,6 +32,7 @@ function openInMaps(lat: number, lng: number) {
 
 export default function MapaScreen() {
   const { user, signOut } = useAuth();
+  const { isOnline } = useNetworkOnline();
   const {
     photos,
     albums,
@@ -43,9 +46,10 @@ export default function MapaScreen() {
     createAlbum,
     syncPhoto,
     syncAllPhotos,
+    monitorState,
   } = useGeoPhotos();
 
-  // Estados para modales de notas, asignación de álbum y creación de álbum
+  // Estados para modales de notas, asignación de álbum, creación de álbum y monitor
   const [selectedPhotoForNote, setSelectedPhotoForNote] = useState<GeoPhoto | null>(null);
   const [noteText, setNoteText] = useState('');
 
@@ -54,6 +58,7 @@ export default function MapaScreen() {
   const [isCreatingAlbum, setIsCreatingAlbum] = useState(false);
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumDesc, setNewAlbumDesc] = useState('');
+  const [isMonitorOpen, setIsMonitorOpen] = useState(false);
 
   // Estados de sincronización (T5 y C2)
   const [syncingPhotoId, setSyncingPhotoId] = useState<number | null>(null);
@@ -103,14 +108,9 @@ export default function MapaScreen() {
     }
   };
 
-  // Sincronización masiva con progreso (C2)
+  // Sincronización bidireccional completa (Pull -> Push) con progreso
   const handleSyncAll = async () => {
-    const pendingCount = photos.filter((p) => p.syncStatus !== 'synced').length;
-    if (pendingCount === 0) {
-      Alert.alert('Al día', 'Todas las fotos ya están sincronizadas con la nube.');
-      return;
-    }
-
+    const pendingCount = monitorState.pendingStats.totalPending;
     setIsBatchSyncing(true);
     setBatchProgress({ current: 0, total: pendingCount });
 
@@ -119,16 +119,33 @@ export default function MapaScreen() {
         setBatchProgress({ current, total });
       });
 
-      Alert.alert(
-        'Sincronización Completada',
-        `Se sincronizaron exitosamente ${result.synced} fotos.${result.failed > 0 ? ` Fallaron: ${result.failed}` : ''}`
-      );
+      if (result.pulled === 0 && result.synced === 0 && result.failed === 0) {
+        Alert.alert('Al día', 'No hay cambios pendientes por bajar ni subir en este momento.');
+      } else {
+        Alert.alert(
+          'Sincronización Pull → Push Completada',
+          `Bajadas (Pull): ${result.pulled}\nSubidas (Push): ${result.synced}${
+            result.failed > 0 ? `\nFallidas: ${result.failed}` : ''
+          }`
+        );
+      }
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Ocurrió un error en la sincronización masiva.');
+      Alert.alert('Error', err?.message || 'Ocurrió un error en la sincronización.');
     } finally {
       setIsBatchSyncing(false);
       setBatchProgress(null);
     }
+  };
+
+  const handleClearAll = () => {
+    Alert.alert(
+      'Borrar todas las fotos',
+      'Las fotos activas se marcarán para borrado lógico en SQLite y en Supabase al sincronizar.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Borrar todo', style: 'destructive', onPress: clearAll },
+      ]
+    );
   };
 
   const handleSignOut = () => {
@@ -160,6 +177,34 @@ export default function MapaScreen() {
         </Pressable>
       </View>
 
+      {/* Barra de Estado de Sincronización -> Monitor UI */}
+      <Pressable
+        onPress={() => setIsMonitorOpen(true)}
+        style={[
+          styles.syncStatusBar,
+          !isOnline
+            ? styles.syncStatusBarOffline
+            : monitorState.errors.length > 0
+            ? styles.syncStatusBarError
+            : monitorState.pendingStats.totalPending > 0
+            ? styles.syncStatusBarPending
+            : styles.syncStatusBarOk,
+        ]}
+      >
+        <Text style={styles.syncStatusBarText} numberOfLines={1}>
+          {!isOnline
+            ? `📴 Offline • ${monitorState.pendingStats.totalPending} pendiente(s) en SQLite`
+            : monitorState.isSyncing
+            ? '🔄 Sincronizando Pull → Push en segundo plano...'
+            : monitorState.errors.length > 0
+            ? `⚠️ ${monitorState.errors.length} error(es) • ${monitorState.pendingStats.totalPending} pendiente(s)`
+            : monitorState.pendingStats.totalPending > 0
+            ? `☁️⬆️ ${monitorState.pendingStats.totalPending} pendiente(s) por subir`
+            : '✅ SQLite y Nube al día'}
+        </Text>
+        <Text style={styles.syncStatusBarLink}>📊 Monitor ›</Text>
+      </Pressable>
+
       {/* Header */}
       <View style={styles.header}>
         <View>
@@ -171,10 +216,10 @@ export default function MapaScreen() {
         <View style={styles.headerActions}>
           <Pressable
             onPress={handleSyncAll}
-            disabled={isBatchSyncing}
-            style={[styles.syncAllBtn, isBatchSyncing && { opacity: 0.6 }]}>
+            disabled={isBatchSyncing || monitorState.isSyncing}
+            style={[styles.syncAllBtn, (isBatchSyncing || monitorState.isSyncing) && { opacity: 0.6 }]}>
             <Text style={styles.syncAllBtnText}>
-              {isBatchSyncing ? '⏳ Subiendo...' : '☁️ Sync Todo'}
+              {isBatchSyncing || monitorState.isSyncing ? '⏳ Sync...' : '☁️ Sync Todo'}
             </Text>
           </Pressable>
           <Pressable
@@ -183,7 +228,7 @@ export default function MapaScreen() {
             <Text style={styles.addAlbumBtnText}>+ Álbum</Text>
           </Pressable>
           {photos.length > 0 && (
-            <Pressable onPress={clearAll} style={styles.clearBtn}>
+            <Pressable onPress={handleClearAll} style={styles.clearBtn}>
               <Text style={styles.clearBtnText}>Borrar</Text>
             </Pressable>
           )}
@@ -356,6 +401,9 @@ export default function MapaScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Monitor de Estado de Sincronización */}
+      <SyncMonitorModal visible={isMonitorOpen} onClose={() => setIsMonitorOpen(false)} />
     </View>
   );
 }
@@ -493,7 +541,11 @@ function PhotoCard({
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.syncBtnText}>
-                {item.syncStatus === 'synced' ? '✓ En Nube' : '☁️ Subir a Nube'}
+                {item.syncStatus === 'synced'
+                  ? '✓ En Nube'
+                  : item.syncStatus === 'modified_pending'
+                  ? '☁️⬆️ Actualizar'
+                  : '☁️ Subir a Nube'}
               </Text>
             )}
           </Pressable>
@@ -536,6 +588,23 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   signOutBtnText: { color: '#ef4444', fontSize: 12, fontWeight: '600' },
+
+  syncStatusBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#262626',
+    gap: 8,
+  },
+  syncStatusBarOk: { backgroundColor: '#132a1d' },
+  syncStatusBarPending: { backgroundColor: '#3a260a' },
+  syncStatusBarOffline: { backgroundColor: '#3f2c0b' },
+  syncStatusBarError: { backgroundColor: '#3b1515' },
+  syncStatusBarText: { color: '#e5e7eb', fontSize: 12, fontWeight: '600', flex: 1 },
+  syncStatusBarLink: { color: '#38bdf8', fontSize: 12, fontWeight: '700' },
 
   header: {
     flexDirection: 'row',

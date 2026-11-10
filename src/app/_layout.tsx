@@ -7,8 +7,14 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme, View, Text, ActivityIndicator } from 'react-native';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import migrations from '@/drizzle/migrations';
 import { db } from '@/db/client';
+import {
+  persistOptions,
+  queryClient,
+  subscribeFocusManager,
+} from '@/lib/queryClient';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import AppTabs from '@/components/app-tabs';
@@ -50,6 +56,13 @@ export default function RootLayout() {
   const { success, error } = useMigrations(db, migrations);
 
   useEffect(() => {
+    const unsubscribeFocus = subscribeFocusManager();
+    return () => {
+      unsubscribeFocus();
+    };
+  }, []);
+
+  useEffect(() => {
     if (error) {
       SplashScreen.hideAsync().catch(() => {});
     }
@@ -78,11 +91,13 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AuthProvider>
-        <AnimatedSplashOverlay />
-        <MainContent />
-      </AuthProvider>
-    </ThemeProvider>
+    <PersistQueryClientProvider client={queryClient} persistOptions={persistOptions}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AuthProvider>
+          <AnimatedSplashOverlay />
+          <MainContent />
+        </AuthProvider>
+      </ThemeProvider>
+    </PersistQueryClientProvider>
   );
 }

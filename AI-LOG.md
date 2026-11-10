@@ -164,4 +164,55 @@
 8. **Limpieza estricta de canales Realtime:** Limpieza garantizada en el retorno de `useEffect` con `supabase.removeChannel(channel)`.
 9. **Expresiones no constantes en `ALTER TABLE` de SQLite en Android:** En Android, el motor nativo de SQLite rechaza expresiones dinámicas como `DEFAULT (lower(hex(randomblob(16))))` al añadir columnas con `ALTER TABLE ADD COLUMN`. Se corrigió utilizando el valor literal constante `DEFAULT ''` en `0002_add_sync_fields.sql` y delegando la asignación de UUIDs a la capa de aplicación mediante `photoRepository.ensureSyncFields()` y `Crypto.randomUUID()`.
 
+---
+
+# Registro de Auditoría de IA – Semana 9
+
+**Estudiante(s):** Leonardo Carrillo Caballero  
+**Semana:** 9  
+**Proyecto:** GeoCam Sync Engine (Offline-First Bidireccional, Soft Deletes, Cursor Pagination y TanStack Query v5)
+
+---
+
+## 1. Prompts Utilizados
+
+- *"Actualiza GeoCam a una arquitectura Offline-First completa con sincronización bidireccional secuencial (Pull luego Push), tabla SQLite `sync_meta`, borrados lógicos sincronizados, paginación por cursor y TanStack Query v5 con persistencia offline."*
+- *"Implementa `useSync` con `refetchOnReconnect: 'always'`, `refetchOnWindowFocus: 'always'`, conexión de `expo-network` con `onlineManager` y `AppState` con `focusManager`."*
+- *"Implementa el muro remoto `usePostsFeed` con `useInfiniteQuery`, `initialPageParam`, búsqueda debounced y scroll infinito verificando `hasNextPage && !isFetchingNextPage`."*
+- *"Crea un Monitor de Estado de Sincronización UI que lea `sync_meta`, muestre pendientes, errores aislados por fila y permita forzar la sincronización manualmente."*
+
+---
+
+## 2. Código Generado vs. Código Modificado
+
+### Migraciones Local y Remota (`0003_add_sync_meta_and_deleted_at.sql`, `supabase/migrations_sync_v2.sql`)
+- **¿Qué generó la IA?:** Añadió `deleted_at` a la tabla SQLite `photos` y creó la tabla `sync_meta` (`key` text PK, `value` text) junto con sus índices, además del script idempotente de PostgreSQL con la columna `server_updated_at`, trigger automático `trg_photos_server_updated_at`, índice compuesto `(user_id, server_updated_at)` y políticas RLS `for update to authenticated`.
+- **¿Qué modifiqué/corregí?:** Verifiqué que `0003_add_sync_meta_and_deleted_at.sql` también se incrustara en `src/drizzle/migrations.js` (`m0003`) para evitar problemas de caché en Metro con `babel-plugin-inline-import` al desplegar en dispositivos físicos.
+
+### Motor de Sincronización y Conflictos (`syncService.ts`, `syncConflicts.ts`, `photoRepository.ts`)
+- **¿Qué generó la IA?:** El ciclo mutex secuencial `Pull -> Push`:
+  1. `Pull`: solicita cambios ordenados ASC por `server_updated_at > cursor` (lotes de 200), descarga el binario local con `FileSystem.downloadAsync` sobre Signed URL si es nuevo, compara conflictos con la función pura `remoteWins(localUpdatedAt, remoteUpdatedAt)` y avanza el cursor en `sync_meta` fila por fila.
+  2. `Push`: procesa elementos pendientes (`syncedAt === null || syncedAt < updatedAt`, incluidos tombstones `deletedAt !== null`) en bloques `try/catch` independientes por fila, usando `.upsert(..., { onConflict: 'client_id' })` y `markSynced` con el `updatedAt` exacto subido.
+- **¿Qué modifiqué/corregí?:** Ajusté `markSynced` para aceptar `remotePath: string | null` cuando una foto es borrada localmente antes de haberse subido jamás a Storage, evitando guardar cadenas vacías `''` en SQLite.
+
+### TanStack Query v5 y Hooks Reactivos (`queryClient.ts`, `useSync.ts`, `usePostsFeed.ts`, `useGeoPhotosDB.ts`)
+- **¿Qué generó la IA?:** Configuración central v5 (`gcTime`, `onlineManager`, `focusManager`), persistencia en SQLite (`expo-sqlite/kv-store`), hook automático `useSync`, feed por cursor `usePostsFeed` e invalidación explícita `['sync']` en cada mutación local.
+- **¿Qué modifiqué/corregí?:**
+  - En `useGeoPhotosDB.ts`, me aseguré de invocar `void queryClient.invalidateQueries({ queryKey: ['sync'] })` sin bloquear con `await` la respuesta local de las mutaciones, garantizando que la cámara, notas y favoritos respondan instantáneamente desde SQLite aunque la red esté lenta.
+  - En `AuthContext.tsx`, añadí `clearPersistedQueryCache()` en `signOut()` para evitar filtrar datos en caché persistente al cambiar de cuenta.
+
+### Interfaz de Usuario y Monitor de Estado (`SyncMonitorModal.tsx`, `nube.tsx`, `mapa.tsx`)
+- **¿Qué generó la IA?:** Pantalla/Modal de Monitor de Sincronización en tiempo real consumiendo `sync_meta` y `photos` vía `useLiveQuery`, feed remoto con búsqueda debounced, banner offline y botones interactivos de monitoreo.
+- **¿Qué modifiqué/corregí?:** Reemplacé el borrado directo en `nube.tsx` y `mapa.tsx` por borrado lógico sincronizado (`deletedAt`) con confirmación preventiva en borrado masivo.
+
+---
+
+## 3. Alucinaciones o Errores Detectados / Evitados
+
+1. **Importación incorrecta de tipo `OmitKeyof` en `@tanstack/react-query-persist-client`:** El compilador `tsc --noEmit` detectó `TS2305` porque `OmitKeyof` pertenece a `@tanstack/react-query` y no al paquete persister. Se corrigió tipando `persistOptions` con `PersistQueryClientProviderProps['persistOptions']`.
+2. **Incompatibilidad `string | null` en `SyncCycleResult.cursor`:** `tsc` reportó que `syncSinglePhotoWithPullFirst` propagaba `SyncResultMetadata['cursor']` (`string | null`) sobre `SyncCycleResult['cursor']` (`string`). Se pasó explícitamente `cursor: pullRes.cursor`.
+3. **Regla Android `NativeTabs` (máximo 5 pestañas):** En lugar de añadir una sexta pestaña en `app-tabs.tsx` (lo cual excede el límite de 5 ítems de `BottomNavigationView` en Android y habría provocado crash), se integró el Monitor de Estado de Sincronización mediante `SyncMonitorModal` accesible directamente desde las barras de estado de `mapa.tsx` y `nube.tsx`.
+4. **Uso estricto de v5 y paginación segura:** Se verificó mediante auditoría estática la ausencia de `cacheTime`, `status === 'loading'`, `.range()` y comandos SQL `DELETE` directos sobre fotos en todo `src/`.
+
+
 

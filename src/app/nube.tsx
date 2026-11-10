@@ -1,75 +1,66 @@
 // src/app/nube.tsx
-// Pestaña Nube (C4): Galería de fotos respaldadas en Supabase con suscripción Realtime.
-// REGLA 6: Carga fotos vía URL firmada temporal (createSignedUrl) al ser un bucket privado.
-// REGLA 9: Suscripción a Realtime con limpieza estricta (supabase.removeChannel) en useEffect.
+// Pestaña Nube: Feed remoto paginado por cursor con TanStack Query v5 + Persistencia Offline + Realtime.
+// Reglas aplicadas:
+// - useInfiniteQuery con initialPageParam: null as string | null y paginación por cursor (created_at < último)
+// - Comprobación de carga v5 con status === 'pending' (sin 'loading' ni cacheTime)
+// - Validación hasNextPage && !isFetchingNextPage en onEndReached
+// - Suscripción Realtime con limpieza estricta (supabase.removeChannel)
+// - Borrado lógico sincronizado (sin comandos DELETE directos)
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
+  ActivityIndicator,
+  Alert,
   FlatList,
   Image,
-  StyleSheet,
-  ActivityIndicator,
-  RefreshControl,
-  Pressable,
-  Alert,
   Linking,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
-import { supabase } from '@/lib/supabase';
+import { useQueryClient } from '@tanstack/react-query';
+import { SyncMonitorModal } from '@/components/SyncMonitorModal';
 import { useAuth } from '@/context/AuthContext';
+import { useGeoPhotos } from '@/context/GeoPhotosContext';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useNetworkOnline } from '@/hooks/useNetworkOnline';
+import { usePostsFeed } from '@/hooks/usePostsFeed';
+import { supabase } from '@/lib/supabase';
+import { photoRepository } from '@/repositories/photoRepository';
 import {
-  fetchRemotePhotos,
-  getSignedUrl,
-  deleteCloudPhoto,
-  type RemotePhoto,
+  softDeleteRemotePhoto,
+  type RemotePhotoFeedItem,
 } from '@/services/cloudPhotos';
-
-interface RemotePhotoWithUrl extends RemotePhoto {
-  signedUrl?: string;
-}
 
 export default function NubeScreen() {
   const { user } = useAuth();
-  const [photos, setPhotos] = useState<RemotePhotoWithUrl[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const { monitorState, removePhoto } = useGeoPhotos();
+  const { isOnline } = useNetworkOnline();
+  const queryClient = useQueryClient();
 
-  // ─── Carga de fotos remotas y generación de URLs firmadas ─────────────────────
+  const [searchText, setSearchText] = useState('');
+  const [monitorOpen, setMonitorOpen] = useState(false);
+  const debouncedSearch = useDebouncedValue(searchText, 400);
 
-  const loadCloudPhotos = useCallback(async () => {
-    try {
-      const remoteList = await fetchRemotePhotos();
+  const {
+    items,
+    status,
+    fetchStatus,
+    error,
+    hasNextPage,
+    isFetchingNextPage,
+    isRefetching,
+    fetchNextPage,
+    refetch,
+  } = usePostsFeed(user?.id, debouncedSearch);
 
-      // Generar URLs firmadas para cada foto remota (bucket privado)
-      const withUrls: RemotePhotoWithUrl[] = await Promise.all(
-        remoteList.map(async (photo) => {
-          try {
-            const url = await getSignedUrl(photo.storage_path);
-            return { ...photo, signedUrl: url };
-          } catch (err) {
-            console.warn(`Error obteniendo signedUrl para ${photo.storage_path}:`, err);
-            return photo;
-          }
-        })
-      );
-
-      setPhotos(withUrls);
-    } catch (err: any) {
-      console.error('[NubeScreen] Error cargando fotos remotas:', err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
-
-  // ─── Suscripción en Tiempo Real (Realtime) con limpieza estricta ───────────────
-
+  // Suscripción en Tiempo Real (Realtime) con limpieza estricta
   useEffect(() => {
-    // Carga inicial
-    loadCloudPhotos();
+    if (!user?.id) return;
 
-    // REGLA 9: Crear canal Realtime para escuchar cambios en la tabla 'photos'
     const channel = supabase
       .channel('public:photos')
       .on(
@@ -77,28 +68,40 @@ export default function NubeScreen() {
         { event: '*', schema: 'public', table: 'photos' },
         (payload) => {
           console.log('[Realtime] Cambio detectado en public.photos:', payload.eventType);
-          loadCloudPhotos();
+          void queryClient.invalidateQueries({ queryKey: ['posts-feed'] });
+          void queryClient.invalidateQueries({ queryKey: ['sync'] });
         }
       )
       .subscribe();
 
-    // Limpieza estricta de canal al desmontar el componente
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadCloudPhotos]);
+  }, [user?.id, queryClient]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    loadCloudPhotos();
+  const handleRefresh = () => {
+    if (!isOnline) {
+      Alert.alert(
+        'Modo Offline',
+        'No hay conexión a internet. Estás visualizando el muro guardado en caché persistente.'
+      );
+      return;
+    }
+    void refetch();
   };
 
-  // ─── Eliminar foto de la nube ────────────────────────────────────────────────
+  const handleEndReached = () => {
+    if (hasNextPage && !isFetchingNextPage) {
+      if (isOnline) {
+        void fetchNextPage();
+      }
+    }
+  };
 
-  const handleDeleteRemote = (photo: RemotePhotoWithUrl) => {
+  const handleDeleteRemote = (photo: RemotePhotoFeedItem) => {
     Alert.alert(
-      'Eliminar de la Nube',
-      '¿Deseas eliminar esta foto de Supabase Storage y de la base de datos remota?',
+      'Eliminar foto (Borrado Lógico)',
+      'La foto se marcará como eliminada y se limpiará de tu dispositivo y de la nube tras sincronizar.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -106,11 +109,26 @@ export default function NubeScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteCloudPhoto(photo.storage_path, photo.client_id);
-              setPhotos((prev) => prev.filter((p) => p.id !== photo.id));
-              Alert.alert('Éxito', 'Foto eliminada de la nube.');
+              const local = await photoRepository.getByClientId(photo.client_id);
+              if (local) {
+                await removePhoto(local.id);
+              } else {
+                if (!isOnline) {
+                  Alert.alert(
+                    'Sin conexión',
+                    'Este elemento aún no existe localmente; conéctate para eliminarlo de la nube.'
+                  );
+                  return;
+                }
+                await softDeleteRemotePhoto(photo);
+                await queryClient.invalidateQueries({ queryKey: ['sync'] });
+              }
+              await queryClient.invalidateQueries({ queryKey: ['posts-feed'] });
             } catch (err: any) {
-              Alert.alert('Error', err?.message || 'No se pudo eliminar la foto remota.');
+              Alert.alert(
+                'Error',
+                err?.message || 'No se pudo procesar el borrado lógico.'
+              );
             }
           },
         },
@@ -119,16 +137,20 @@ export default function NubeScreen() {
   };
 
   const openMap = (lat: number, lng: number) => {
-    Linking.openURL(`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`);
+    Linking.openURL(
+      `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+    );
   };
 
-  // ─── Renderizado ─────────────────────────────────────────────────────────────
+  const pendingBadgeCount = monitorState.pendingStats.totalPending;
+  const hasErrors = monitorState.errors.length > 0;
 
-  if (loading && !refreshing) {
+  // Estado inicial pendiente en TanStack Query v5 (status === 'pending')
+  if (status === 'pending' && fetchStatus !== 'paused' && items.length === 0) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#0a7ea4" />
-        <Text style={styles.loadingText}>Conectando con Supabase...</Text>
+        <Text style={styles.loadingText}>Cargando feed remoto desde Supabase...</Text>
       </View>
     );
   }
@@ -137,48 +159,140 @@ export default function NubeScreen() {
     <View style={styles.container}>
       {/* Encabezado */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>☁️ Respaldo en la Nube</Text>
-          <Text style={styles.headerSubtitle}>
-            {user?.email} • {photos.length} fotos en Supabase
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>☁️ Feed en la Nube</Text>
+          <Text style={styles.headerSubtitle} numberOfLines={1}>
+            {user?.email} • {items.length} cargadas {hasNextPage ? '(hay más)' : ''}
           </Text>
         </View>
-        <Pressable onPress={onRefresh} style={styles.refreshBtn}>
-          <Text style={styles.refreshBtnText}>↻ Recargar</Text>
-        </Pressable>
+
+        <View style={styles.headerButtons}>
+          <Pressable
+            onPress={() => setMonitorOpen(true)}
+            style={[
+              styles.monitorBtn,
+              hasErrors
+                ? styles.monitorBtnError
+                : pendingBadgeCount > 0
+                ? styles.monitorBtnPending
+                : null,
+            ]}
+          >
+            <Text style={styles.monitorBtnText}>
+              {monitorState.isSyncing
+                ? '⏳ Sync'
+                : pendingBadgeCount > 0
+                ? `📊 Sync (${pendingBadgeCount})`
+                : hasErrors
+                ? '⚠️ Monitor'
+                : '📊 Sync ✓'}
+            </Text>
+          </Pressable>
+
+          <Pressable onPress={handleRefresh} style={styles.refreshBtn}>
+            <Text style={styles.refreshBtnText}>↻</Text>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Lista de Fotos en la Nube */}
-      {photos.length === 0 ? (
+      {/* Banner Offline Persistente */}
+      {!isOnline && (
+        <View style={styles.offlineBanner}>
+          <Text style={styles.offlineBannerText}>
+            📴 Sin conexión — Mostrando caché persistente offline
+          </Text>
+        </View>
+      )}
+
+      {/* Barra de Búsqueda Debounced */}
+      <View style={styles.searchContainer}>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Buscar por nota o fuente (camera / gallery)..."
+          placeholderTextColor="#777"
+          value={searchText}
+          onChangeText={setSearchText}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchText.length > 0 && (
+          <Pressable onPress={() => setSearchText('')} style={styles.clearSearchBtn}>
+            <Text style={styles.clearSearchText}>✕</Text>
+          </Pressable>
+        )}
+      </View>
+
+      {/* Banner de error si falló la consulta remota */}
+      {status === 'error' && error && (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>
+            ⚠️ Error al consultar la nube: {error.message}
+          </Text>
+        </View>
+      )}
+
+      {/* Lista de Fotos Remotas con Paginación por Cursor */}
+      {items.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyIcon}>☁️</Text>
-          <Text style={styles.emptyTitle}>Sin fotos en la nube</Text>
+          <Text style={styles.emptyTitle}>
+            {debouncedSearch
+              ? 'Sin resultados para tu búsqueda'
+              : !isOnline && status === 'pending'
+              ? 'Feed remoto sin caché offline aún'
+              : 'Sin fotos en la nube'}
+          </Text>
           <Text style={styles.emptyText}>
-            Tus fotos respaldadas aparecerán aquí. Ve a la pestaña Mapa y presiona &quot;Sincronizar&quot;
-            en cualquier foto o &quot;Sincronizar todo&quot; para subirlas a Supabase.
+            {debouncedSearch
+              ? `No se encontraron publicaciones que coincidan con "${debouncedSearch}".`
+              : !isOnline && status === 'pending'
+              ? 'Conéctate una vez a internet para descargar y persistir el muro remoto en caché.'
+              : 'Tus fotos sincronizadas aparecerán aquí automáticamente gracias a la cola Pull → Push en segundo plano.'}
           </Text>
         </View>
       ) : (
         <FlatList
-          data={photos}
-          keyExtractor={(item) => String(item.id)}
+          data={items}
+          keyExtractor={(item) => item.client_id}
           contentContainerStyle={styles.list}
+          onEndReached={handleEndReached}
+          onEndReachedThreshold={0.4}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0a7ea4" />
+            <RefreshControl
+              refreshing={isRefetching && !isFetchingNextPage}
+              onRefresh={handleRefresh}
+              tintColor="#0a7ea4"
+            />
+          }
+          ListFooterComponent={
+            <View style={styles.footerContainer}>
+              {isFetchingNextPage ? (
+                <View style={styles.footerRow}>
+                  <ActivityIndicator size="small" color="#0a7ea4" />
+                  <Text style={styles.footerText}>Cargando más publicaciones...</Text>
+                </View>
+              ) : !hasNextPage ? (
+                <Text style={styles.footerEndText}>— Fin del muro remoto —</Text>
+              ) : null}
+            </View>
           }
           renderItem={({ item }) => (
             <View style={styles.card}>
-              {/* Imagen con Signed URL */}
               <View style={styles.imageWrapper}>
                 {item.signedUrl ? (
-                  <Image source={{ uri: item.signedUrl }} style={styles.image} resizeMode="cover" />
+                  <Image
+                    source={{ uri: item.signedUrl }}
+                    style={styles.image}
+                    resizeMode="cover"
+                  />
                 ) : (
                   <View style={styles.imagePlaceholder}>
-                    <ActivityIndicator size="small" color="#0a7ea4" />
+                    <Text style={styles.placeholderOfflineText}>
+                      {isOnline ? 'Cargando vista previa...' : 'Sin vista previa en caché'}
+                    </Text>
                   </View>
                 )}
 
-                {/* Badge de fuente */}
                 <View
                   style={[
                     styles.sourceBadge,
@@ -190,7 +304,6 @@ export default function NubeScreen() {
                   </Text>
                 </View>
 
-                {/* Botón flotante eliminar */}
                 <Pressable
                   style={styles.deleteCircle}
                   onPress={() => handleDeleteRemote(item)}
@@ -199,11 +312,11 @@ export default function NubeScreen() {
                 </Pressable>
               </View>
 
-              {/* Metadatos */}
               <View style={styles.metaContainer}>
                 <View style={styles.row}>
                   <Text style={styles.dateText}>
-                    {new Date(item.taken_at).toLocaleDateString()} • {new Date(item.taken_at).toLocaleTimeString()}
+                    {new Date(item.taken_at).toLocaleDateString()} •{' '}
+                    {new Date(item.taken_at).toLocaleTimeString()}
                   </Text>
                   {item.favorite && <Text style={styles.favoriteBadge}>⭐ Favorita</Text>}
                 </View>
@@ -234,6 +347,9 @@ export default function NubeScreen() {
           )}
         />
       )}
+
+      {/* Monitor de Estado de Sincronización */}
+      <SyncMonitorModal visible={monitorOpen} onClose={() => setMonitorOpen(false)} />
     </View>
   );
 }
@@ -260,11 +376,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 56,
-    paddingBottom: 14,
+    paddingTop: 54,
+    paddingBottom: 12,
     backgroundColor: '#181818',
     borderBottomWidth: 1,
     borderBottomColor: '#262626',
+    gap: 10,
   },
   headerTitle: {
     color: '#fff',
@@ -276,20 +393,95 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  monitorBtn: {
+    backgroundColor: '#1e3a5f',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 8,
+  },
+  monitorBtnPending: {
+    backgroundColor: '#92400e',
+  },
+  monitorBtnError: {
+    backgroundColor: '#7f1d1d',
+  },
+  monitorBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   refreshBtn: {
     backgroundColor: '#262626',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
     borderRadius: 8,
   },
   refreshBtnText: {
     color: '#0a7ea4',
-    fontSize: 13,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  offlineBanner: {
+    backgroundColor: '#78350f',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#92400e',
+  },
+  offlineBannerText: {
+    color: '#fde68a',
+    fontSize: 12,
     fontWeight: '600',
+    textAlign: 'center',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1b1b1b',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2c2c2c',
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    paddingVertical: 10,
+    fontSize: 13,
+  },
+  clearSearchBtn: {
+    padding: 6,
+  },
+  clearSearchText: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  errorBanner: {
+    backgroundColor: 'rgba(239,68,68,0.16)',
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ef4444',
+  },
+  errorBannerText: {
+    color: '#fca5a5',
+    fontSize: 12,
   },
   list: {
     padding: 16,
     gap: 16,
+    paddingBottom: 32,
   },
   emptyContainer: {
     flex: 1,
@@ -299,11 +491,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIcon: {
-    fontSize: 56,
+    fontSize: 52,
   },
   emptyTitle: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -334,6 +526,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 16,
+  },
+  placeholderOfflineText: {
+    color: '#888',
+    fontSize: 12,
+    textAlign: 'center',
   },
   sourceBadge: {
     position: 'absolute',
@@ -414,5 +612,22 @@ const styles = StyleSheet.create({
     color: '#555',
     fontSize: 11,
     marginTop: 2,
+  },
+  footerContainer: {
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  footerText: {
+    color: '#888',
+    fontSize: 12,
+  },
+  footerEndText: {
+    color: '#555',
+    fontSize: 12,
   },
 });

@@ -35,6 +35,16 @@ export const photos = sqliteTable('photos', {
   remotePath: text('remote_path'),
   syncedAt: integer('synced_at'),
   ownerId: text('owner_id'),
+  // Borrado lógico sincronizado (Migración 4 - Sync Bidireccional)
+  deletedAt: integer('deleted_at'),
+});
+
+/**
+ * Tabla de metadatos de sincronización (cursor de bajada, estadísticas y errores).
+ */
+export const syncMeta = sqliteTable('sync_meta', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
 });
 
 /**
@@ -56,4 +66,7 @@ export type NewAlbum = typeof albums.$inferInsert;
 
 export type Photo = typeof photos.$inferSelect;
 export type NewPhoto = typeof photos.$inferInsert;
+
+export type SyncMeta = typeof syncMeta.$inferSelect;
+export type NewSyncMeta = typeof syncMeta.$inferInsert;
 

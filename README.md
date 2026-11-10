@@ -169,14 +169,14 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 | **React Native 0.86** | Framework de desarrollo móvil |
 | **Expo SDK 57** | Plataforma de desarrollo y build |
 | **Expo Router** | Navegación basada en archivos |
-| **expo-sqlite** | Base de datos local SQLite con `openDatabaseSync` |
-| **drizzle-orm & drizzle-kit** | ORM type-safe con migraciones SQL y consultas reactivas (`useLiveQuery`) |
-| **expo-file-system** | Persistencia física de fotos en `documentDirectory` |
-| **expo-camera** | Acceso a la cámara del dispositivo |
-| **expo-location** | Geolocalización (GPS) |
-| **expo-image-picker** | Selección de imágenes de galería |
-| **expo-sensors** | Acelerómetro (detección de shake) |
-| **TypeScript** | Tipado estricto sin `any` |
+| **expo-sqlite & kv-store** | Base de datos local SQLite (`openDatabaseSync`) y caché persistente |
+| **drizzle-orm & drizzle-kit** | ORM type-safe con migraciones SQL (0000–0003) y consultas reactivas (`useLiveQuery`) |
+| **@tanstack/react-query v5** | Motor reactivo de sincronización, `useInfiniteQuery` y persistencia offline |
+| **expo-network** | Detección de conectividad conectada a `onlineManager` |
+| **Supabase (Auth, DB, Storage, Realtime)** | Backend en la nube con RLS estricto y URLs firmadas |
+| **expo-file-system** | Persistencia y descarga física de fotos en `documentDirectory` |
+| **expo-camera / location / image-picker / sensors** | Hardware nativo con degradación elegante |
+| **TypeScript** | Tipado estricto verificable con `tsc --noEmit` |
 
 ---
 
@@ -203,38 +203,56 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 ```
 src/
 ├── app/
-│   ├── _layout.tsx          # Layout raíz con migrador runtime (useMigrations)
-│   ├── index.tsx            # Redirect automático a /geocam
-│   ├── geocam.tsx           # Pantalla de cámara principal
-│   ├── mapa.tsx             # Galería interactiva (notas, favoritas, mapa)
-│   └── explore.tsx          # Gestor de Álbumes y métricas SQLite
+│   ├── _layout.tsx             # PersistQueryClientProvider + FocusManager + useMigrations + Auth Guard
+│   ├── index.tsx               # Redirect automático a /geocam
+│   ├── login.tsx               # Inicio de sesión y registro con Supabase Auth
+│   ├── geocam.tsx              # Pantalla de cámara principal
+│   ├── mapa.tsx                # Galería offline, barra de estado Sync, notas, favoritas y álbumes
+│   ├── explore.tsx             # Gestor de Álbumes y métricas SQLite
+│   └── nube.tsx                # Feed remoto con cursor, scroll infinito, búsqueda debounced y Realtime
 ├── components/
-│   ├── PermissionPrimer.tsx # UI para solicitar permisos
-│   ├── app-tabs.tsx         # Navegación por pestañas (nativo)
-│   └── app-tabs.web.tsx     # Navegación por pestañas (web)
+│   ├── PermissionPrimer.tsx    # UI para solicitar permisos
+│   ├── SyncMonitorModal.tsx    # Monitor de Estado (pendientes, cursor sync_meta, errores, force sync)
+│   ├── app-tabs.tsx            # Navegación por pestañas (nativo)
+│   └── app-tabs.web.tsx        # Navegación por pestañas (web)
 ├── context/
-│   └── GeoPhotosContext.tsx # Puente reactivo entre repositorios y pantallas
+│   ├── AuthContext.tsx         # Sesión segura SecureStore + limpieza de caché al salir
+│   └── GeoPhotosContext.tsx    # Puente reactivo + ejecución global de useSync()
 ├── db/
-│   ├── client.ts            # Conexión SQLite con PRAGMA foreign_keys = ON;
-│   └── schema.ts            # Esquema Drizzle (tablas albums y photos)
+│   ├── client.ts               # Conexión SQLite con PRAGMA foreign_keys = ON;
+│   └── schema.ts               # Tablas albums, photos (con deleted_at) y sync_meta
 ├── drizzle/
-│   ├── 0000_init_albums_and_photos.sql # Migración 1: Tablas base
-│   ├── 0001_add_notes_and_favorites.sql# Migración 2: Notas y Favoritas
-│   └── migrations.js        # Índice para el migrador móvil
+│   ├── 0000_init_albums_and_photos.sql
+│   ├── 0001_add_notes_and_favorites.sql
+│   ├── 0002_add_sync_fields.sql
+│   ├── 0003_add_sync_meta_and_deleted_at.sql # Migración 4: sync_meta, deleted_at e índices
+│   └── migrations.js           # Índice para el migrador móvil (m0000–m0003)
 ├── hooks/
-│   ├── useAlbumsDB.ts       # Hook reactivo de álbumes (useLiveQuery)
-│   ├── useCamera.ts         # Hook: permisos, captura, flip cámara
-│   ├── useGeoLocation.ts    # Hook: GPS en tiempo real + cleanup
-│   ├── useGeoPhotosDB.ts    # Hook reactivo de fotos (useLiveQuery)
-│   └── useShake.ts          # Hook: detección de shake + cleanup
+│   ├── useAlbumsDB.ts          # Hook reactivo de álbumes
+│   ├── useCamera.ts            # Hook de cámara y permisos
+│   ├── useDebouncedValue.ts    # Debounce para búsqueda remota
+│   ├── useGeoLocation.ts       # Hook GPS en tiempo real
+│   ├── useGeoPhotosDB.ts       # Mutaciones SQLite instantáneas + invalidación de ['sync']
+│   ├── useNetworkOnline.ts     # Conectividad en vivo con expo-network
+│   ├── usePostsFeed.ts         # useInfiniteQuery con paginación por cursor (created_at < último)
+│   ├── useShake.ts             # Detección de sacudida
+│   └── useSync.ts              # useQuery ['sync'] (refetchOnReconnect/Focus: 'always') + monitor SQLite
+├── lib/
+│   ├── queryClient.ts          # QueryClient v5 (gcTime, onlineManager, focusManager, persistencia)
+│   ├── secureStorage.ts        # Adaptador chunked sobre expo-secure-store
+│   └── supabase.ts             # Cliente Supabase v2
 ├── repositories/
-│   ├── albumRepository.ts   # CRUD encapsulado de álbumes
-│   └── photoRepository.ts   # CRUD encapsulado de fotos y borrado físico
+│   ├── albumRepository.ts      # CRUD de álbumes
+│   ├── photoRepository.ts      # Fuente de verdad SQLite con borrados lógicos y markSynced exacto
+│   └── syncMetaRepository.ts   # Persistencia key/value de cursor, resultado y errores en sync_meta
 ├── services/
-│   └── photoStorage.ts      # Manejo permanente de imágenes (FileSystem)
+│   ├── cloudPhotos.ts          # Upload ArrayBuffer, Pull batch, cursor feed, soft delete y upsert
+│   ├── photoStorage.ts         # Persistencia local y descarga binaria vía URL firmada
+│   ├── syncConflicts.ts        # Función pura remoteWins(localUpdatedAt, remoteUpdatedAt)
+│   └── syncService.ts          # Motor secuencial Pull -> Push con aislamiento de errores por fila
 └── types/
-    ├── declarations.d.ts    # Tipos para archivos .sql y migraciones
-    └── geo.ts               # Tipos: Coords, GeoPhoto, PermissionState
+    ├── declarations.d.ts       # Tipos para archivos .sql y migraciones
+    └── geo.ts                  # Tipos compartidos GeoPhoto, Coords, SyncStatus
 ```
 
 ---
@@ -386,6 +404,78 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu_anon_publishable_key
 ```
 
 > ⚠️ **Seguridad:** Nunca utilices `SUPABASE_SERVICE_ROLE_KEY` en el cliente móvil. Únicamente se debe emplear la clave pública `anon`.
+
+---
+
+## 🔄 Semana 9: Offline-First Bidireccional y TanStack Query v5
+
+En la Semana 9 se evolucionó GeoCam hacia una arquitectura **Offline-First completa con sincronización bidireccional (Pull → Push)**, resolución determinista de conflictos (*Last-Write-Wins*), borrados lógicos sincronizados, paginación remota basada en cursor y persistencia offline de caché mediante **TanStack Query v5**.
+
+### 🧭 Flujo de Sincronización Secuencial (`Pull → Push`)
+
+```mermaid
+sequenceDiagram
+    participant UI as Pantallas / Hooks Locales
+    participant SQLite as SQLite (photos + sync_meta)
+    participant TQ as TanStack Query v5 (useSync)
+    participant Supa as Supabase (Postgres + Storage)
+
+    UI->>SQLite: Escribe inmediatamente (syncedAt = null / updatedAt = now)
+    UI-->>TQ: invalidateQueries(['sync']) en segundo plano
+    TQ->>Supa: PASO 1 (PULL): server_updated_at > cursor (ORDER ASC, limit 200)
+    Supa-->>TQ: Filas cambiadas en la nube
+    TQ->>SQLite: remoteWins() -> Inserta / Actualiza + descarga Signed URL + avanza cursor fila a fila
+    TQ->>SQLite: Obtiene pendientes (syncedAt IS NULL OR syncedAt < updatedAt)
+    TQ->>Supa: PASO 2 (PUSH): Upload ArrayBuffer (si !remotePath) + upsert(onConflict: 'client_id')
+    TQ->>SQLite: markSynced(id, path, exactUploadedUpdatedAt)
+```
+
+### ✨ Capacidades Clave Implementadas
+
+1. **Reglas Offline-First y Consistencia de Datos:**
+   - **SQLite es la fuente de verdad absoluta:** Lecturas y escrituras locales son instantáneas sin esperar a la nube.
+   - **Condición pendiente estricta (`isPhotoPendingSync`):** `syncedAt === null || syncedAt < updatedAt`.
+   - **Resolución de conflictos (`remoteWins`):** En caso de modificación simultánea multi-dispositivo gana el cambio más reciente (`remoteUpdatedAt > localUpdatedAt`).
+   - **Marcado exacto de sincronización (`markSynced`):** Reemplaza `syncedAt` exactamente con el `updatedAt` subido (nunca `Date.now()`), preservando ediciones hechas durante la ventana de subida.
+2. **TanStack Query v5 Estricto (`src/lib/queryClient.ts`, `src/hooks/`):**
+   - Configurado exclusivamente con sintaxis de objeto, `gcTime`, y `status === 'pending'`.
+   - Integración de `expo-network` con `onlineManager.setEventListener` y React Native `AppState` con `focusManager.setFocused`.
+   - Hook automático `useSync` con `refetchOnReconnect: 'always'` y `refetchOnWindowFocus: 'always'`.
+   - **Persistencia Offline del Muro Remoto:** `@tanstack/react-query-persist-client` sobre `expo-sqlite/kv-store`, limpiado automáticamente al cerrar sesión.
+3. **Borrados Lógicos Sincronizados (Cero `SQL DELETE` directos):**
+   - Eliminar una foto marca `deletedAt` y `updatedAt` localmente en SQLite (ocultándose inmediatamente con `isNull(photos.deletedAt)`).
+   - Al sincronizar, se sube `deleted_at` mediante `upsert` y únicamente después de confirmarlo se destruyen los binarios en Storage y en `FileSystem.documentDirectory`.
+4. **Muro Remoto Paginado por Cursor (`src/app/nube.tsx`, `src/hooks/usePostsFeed.ts`):**
+   - `useInfiniteQuery` con `initialPageParam: null as string | null` y paginación `created_at < último` (evita duplicados frente a `.range()`).
+   - Búsqueda en tiempo real debounced (`useDebouncedValue`) e scroll infinito verificando `hasNextPage && !isFetchingNextPage`.
+5. **Monitor de Estado de Sincronización UI (`src/components/SyncMonitorModal.tsx`):**
+   - Panel interactivo accesible desde las pestañas **Mapa** y **Nube** que consulta `sync_meta` y `photos` en tiempo real: muestra conectividad, cursor actual, conteo de subidas/borrados pendientes, historial de errores por elemento sin detener el resto del lote y botón de sincronización manual forzada.
+
+### 🗄️ Migración Remota en Supabase (Semana 9)
+
+Adicionalmente al esquema inicial de Semana 8, ejecuta el script idempotente incluido en [supabase/migrations_sync_v2.sql](supabase/migrations_sync_v2.sql) en el **SQL Editor de Supabase** para añadir `server_updated_at`, `deleted_at`, el trigger obligatorio y los índices compuestos:
+
+```sql
+alter table public.photos
+  add column if not exists server_updated_at timestamptz not null default now(),
+  add column if not exists deleted_at timestamptz;
+
+create or replace function public.set_server_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.server_updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_photos_server_updated_at on public.photos;
+create trigger trg_photos_server_updated_at
+  before insert or update on public.photos
+  for each row execute function public.set_server_updated_at();
+
+create index if not exists idx_photos_user_server_updated_at
+  on public.photos (user_id, server_updated_at);
+```
 
 ---
 

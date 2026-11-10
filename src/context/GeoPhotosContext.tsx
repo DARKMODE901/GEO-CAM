@@ -5,6 +5,8 @@ import type { Album } from '@/db/schema';
 import { useGeoPhotosDB, type PhotoFilter } from '@/hooks/useGeoPhotosDB';
 import { useAlbumsDB } from '@/hooks/useAlbumsDB';
 import { useAuth } from '@/context/AuthContext';
+import { useSync, type SyncMonitorState } from '@/hooks/useSync';
+import type { SyncCycleResult } from '@/services/syncService';
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
 
@@ -30,7 +32,12 @@ interface GeoPhotosContextValue {
   createAlbum: (name: string, description?: string) => Promise<Album>;
   removeAlbum: (id: number) => Promise<void>;
   syncPhoto: (id: number) => Promise<void>;
-  syncAllPhotos: (onProgress?: (current: number, total: number) => void) => Promise<{ synced: number; failed: number }>;
+  syncAllPhotos: (
+    onProgress?: (current: number, total: number) => void
+  ) => Promise<{ synced: number; failed: number; pulled: number }>;
+  monitorState: SyncMonitorState;
+  forceSync: () => Promise<SyncCycleResult | null>;
+  clearSyncErrors: () => Promise<void>;
 }
 
 // ─── Contexto ─────────────────────────────────────────────────────────────────
@@ -40,12 +47,8 @@ const GeoPhotosContext = createContext<GeoPhotosContextValue | undefined>(undefi
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 /**
- * GeoPhotosProvider: Conecta la capa de presentación (UI) con la capa de
- * datos persistente mediante SQLite, Drizzle ORM, FileSystem y Supabase Cloud Sync.
- *
- * Flujo de arquitectura:
- * Pantalla (UI) -> useGeoPhotos (Hook) -> Repositorios -> Drizzle/Esquema -> expo-sqlite
- *                                      -> Supabase Storage & PostgreSQL (Nube)
+ * GeoPhotosProvider: Conecta la capa de presentación (UI) con SQLite (fuente de verdad)
+ * y orquesta en segundo plano la sincronización bidireccional Pull -> Push con TanStack Query v5.
  */
 export function GeoPhotosProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
@@ -67,16 +70,17 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
 
   const { albums, createAlbum, removeAlbum } = useAlbumsDB();
 
-  // Mapear de entidad de SQLite (Drizzle) a modelo de interfaz GeoPhoto con syncStatus
+  // Mantiene activo el motor de sincronización automática (reconexión, primer plano e invalidación)
+  const { monitorState, forceSync, clearSyncErrors } = useSync(ownerId);
+
+  // Mapear entidad SQLite (Drizzle) -> modelo de interfaz GeoPhoto con estado de sincronización
   const photos: GeoPhoto[] = useMemo(() => {
     return rawPhotos.map((p) => {
-      let syncStatus: SyncStatus = 'local_only';
-      if (p.remotePath) {
-        if (p.updatedAt > (p.syncedAt ?? 0)) {
-          syncStatus = 'modified_pending';
-        } else {
-          syncStatus = 'synced';
-        }
+      let syncStatus: SyncStatus = 'synced';
+      if (p.syncedAt === null) {
+        syncStatus = 'local_only';
+      } else if (p.syncedAt < p.updatedAt) {
+        syncStatus = 'modified_pending';
       }
 
       return {
@@ -101,6 +105,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
         remotePath: p.remotePath,
         syncedAt: p.syncedAt,
         ownerId: p.ownerId,
+        deletedAt: p.deletedAt,
         syncStatus,
       };
     });
@@ -125,6 +130,9 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     removeAlbum,
     syncPhoto,
     syncAllPhotos,
+    monitorState,
+    forceSync,
+    clearSyncErrors,
   };
 
   return (
