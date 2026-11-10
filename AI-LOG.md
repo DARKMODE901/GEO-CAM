@@ -203,7 +203,10 @@
 
 ### Interfaz de Usuario y Monitor de Estado (`SyncMonitorModal.tsx`, `nube.tsx`, `mapa.tsx`)
 - **¿Qué generó la IA?:** Pantalla/Modal de Monitor de Sincronización en tiempo real consumiendo `sync_meta` y `photos` vía `useLiveQuery`, feed remoto con búsqueda debounced, banner offline y botones interactivos de monitoreo.
-- **¿Qué modifiqué/corregí?:** Reemplacé el borrado directo en `nube.tsx` y `mapa.tsx` por borrado lógico sincronizado (`deletedAt`) con confirmación preventiva en borrado masivo.
+- **¿Qué modifiqué/corregí?:**
+  - Reemplacé el borrado directo en `nube.tsx` y `mapa.tsx` por borrado lógico sincronizado (`deletedAt`) con confirmación preventiva en borrado masivo.
+  - Desacoplé completamente las pantallas de `src/app/` de Drizzle y Supabase: las migraciones de SQLite pasaron a `useDatabaseMigrations.ts`, la suscripción Realtime a `usePhotosRealtime.ts`, los tipos compartidos a `src/types/geo.ts` (`GeoAlbum`, `RemotePhotoFeedItem`), y el borrado en la nube a `deleteFeedPhoto()` (`syncService.ts` / `GeoPhotosContext.tsx`).
+  - Añadí estados explícitos con botón **Reintentar** en `nube.tsx` tanto en el banner de error (cuando hay caché previa) como en la vista de error completa y de pantalla vacía/sin conexión.
 
 ---
 
@@ -213,6 +216,7 @@
 2. **Incompatibilidad `string | null` en `SyncCycleResult.cursor`:** `tsc` reportó que `syncSinglePhotoWithPullFirst` propagaba `SyncResultMetadata['cursor']` (`string | null`) sobre `SyncCycleResult['cursor']` (`string`). Se pasó explícitamente `cursor: pullRes.cursor`.
 3. **Regla Android `NativeTabs` (máximo 5 pestañas):** En lugar de añadir una sexta pestaña en `app-tabs.tsx` (lo cual excede el límite de 5 ítems de `BottomNavigationView` en Android y habría provocado crash), se integró el Monitor de Estado de Sincronización mediante `SyncMonitorModal` accesible directamente desde las barras de estado de `mapa.tsx` y `nube.tsx`.
 4. **Uso estricto de v5 y paginación segura:** Se verificó mediante auditoría estática la ausencia de `cacheTime`, `status === 'loading'`, `.range()` y comandos SQL `DELETE` directos sobre fotos en todo `src/`.
+5. **Fuga de capas en pantallas (`src/app/`) y error RLS por cambio de cuenta:** Se detectó que `nube.tsx`, `explore.tsx` y `_layout.tsx` importaban símbolos de `supabase`, `cloudPhotos`, `photoRepository` o `@/db/schema`; además, una fila heredada sin `owner_id` de otra cuenta podía quedar mezclada y fallar en RLS durante un `Push` tras cambiar de usuario. Se aisló la capa de UI de Supabase/Drizzle y se fortaleció `photoRepository.ensureSyncFields()` para inferir y completar el `owner_id` desde el prefijo UUID de `remote_path` cuando falta.
 
 
 

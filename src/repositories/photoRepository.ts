@@ -274,18 +274,29 @@ export const photoRepository = {
   },
 
   /**
-   * Garantiza que todas las fotos existentes tengan un clientId válido y updatedAt.
+   * Garantiza que todas las fotos existentes tengan un clientId válido, updatedAt
+   * y ownerId inferido si ya poseen remotePath (${userId}/${clientId}.jpg).
    */
   async ensureSyncFields(): Promise<void> {
     const all = await db.select().from(photos);
     for (const p of all) {
-      if (!p.clientId || p.clientId.trim() === '' || !p.updatedAt) {
+      const candidateOwner =
+        !p.ownerId && p.remotePath && p.remotePath.includes('/')
+          ? p.remotePath.split('/')[0]
+          : null;
+      const inferredOwner =
+        candidateOwner && /^[0-9a-f-]{36}$/i.test(candidateOwner)
+          ? candidateOwner
+          : null;
+
+      if (!p.clientId || p.clientId.trim() === '' || !p.updatedAt || inferredOwner) {
         await db
           .update(photos)
           .set({
             clientId:
               p.clientId && p.clientId.trim() !== '' ? p.clientId : Crypto.randomUUID(),
             updatedAt: p.updatedAt && p.updatedAt > 0 ? p.updatedAt : p.createdAt,
+            ...(inferredOwner ? { ownerId: inferredOwner } : {}),
           })
           .where(eq(photos.id, p.id));
       }

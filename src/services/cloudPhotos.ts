@@ -5,34 +5,13 @@
 // PROHIBIDO: No usa .range() en paginación ni comandos DELETE directos sobre fotos.
 
 import { supabase } from '@/lib/supabase';
+import type {
+  RemoteFeedPage,
+  RemotePhoto,
+  RemotePhotoFeedItem,
+} from '@/types/geo';
 
-// ─── Tipos para fotos remotas de Supabase ─────────────────────────────────────
-
-export interface RemotePhoto {
-  id: number;
-  user_id: string;
-  client_id: string;
-  storage_path: string;
-  latitude: number | null;
-  longitude: number | null;
-  note: string | null;
-  favorite: boolean;
-  source: 'camera' | 'gallery';
-  taken_at: string;
-  updated_at: string;
-  created_at: string;
-  server_updated_at: string;
-  deleted_at: string | null;
-}
-
-export interface RemotePhotoFeedItem extends RemotePhoto {
-  signedUrl?: string;
-}
-
-export interface RemoteFeedPage {
-  items: RemotePhotoFeedItem[];
-  nextCursor: string | null;
-}
+export type { RemoteFeedPage, RemotePhoto, RemotePhotoFeedItem };
 
 // ─── Funciones de Storage y Metadatos ─────────────────────────────────────────
 
@@ -220,4 +199,26 @@ export async function softDeleteRemotePhoto(photo: RemotePhoto): Promise<void> {
   });
 
   await removeStorageObject(photo.storage_path);
+}
+
+/**
+ * Suscribe un listener Realtime sobre public.photos y devuelve la función de limpieza.
+ */
+export function subscribeToPhotosRealtime(
+  onRemoteChange: (eventType: string) => void
+): () => void {
+  const channel = supabase
+    .channel('public:photos')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'photos' },
+      (payload) => {
+        onRemoteChange(payload.eventType);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

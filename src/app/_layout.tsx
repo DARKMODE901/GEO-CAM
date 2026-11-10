@@ -6,10 +6,8 @@ import React, { useEffect } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useColorScheme, View, Text, ActivityIndicator } from 'react-native';
-import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import migrations from '@/drizzle/migrations';
-import { db } from '@/db/client';
+import { useDatabaseMigrations } from '@/hooks/useDatabaseMigrations';
 import {
   persistOptions,
   queryClient,
@@ -53,7 +51,7 @@ function MainContent() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const { success, error } = useMigrations(db, migrations);
+  const { success, error } = useDatabaseMigrations();
 
   useEffect(() => {
     const unsubscribeFocus = subscribeFocusManager();

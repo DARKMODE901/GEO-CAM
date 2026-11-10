@@ -1,6 +1,6 @@
 # 📸 GeoCam
 
-Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite tomar fotografías geolocalizadas, importar imágenes desde la galería y visualizarlas en una galería con coordenadas GPS.
+Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite tomar fotografías geolocalizadas, importar imágenes desde la galería y visualizarlas en una galería con coordenadas GPS.
 
 ---
 
@@ -166,8 +166,8 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 
 | Tecnología | Uso |
 |---|---|
-| **React Native 0.86** | Framework de desarrollo móvil |
-| **Expo SDK 57** | Plataforma de desarrollo y build |
+| **React Native 0.88** | Framework de desarrollo móvil |
+| **Expo SDK 58** | Plataforma de desarrollo y build |
 | **Expo Router** | Navegación basada en archivos |
 | **expo-sqlite & kv-store** | Base de datos local SQLite (`openDatabaseSync`) y caché persistente |
 | **drizzle-orm & drizzle-kit** | ORM type-safe con migraciones SQL (0000–0003) y consultas reactivas (`useLiveQuery`) |
@@ -203,13 +203,13 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 57** que permite t
 ```
 src/
 ├── app/
-│   ├── _layout.tsx             # PersistQueryClientProvider + FocusManager + useMigrations + Auth Guard
+│   ├── _layout.tsx             # PersistQueryClientProvider + FocusManager + useDatabaseMigrations + Auth Guard
 │   ├── index.tsx               # Redirect automático a /geocam
-│   ├── login.tsx               # Inicio de sesión y registro con Supabase Auth
+│   ├── login.tsx               # Inicio de sesión y registro con Supabase Auth (vía AuthContext)
 │   ├── geocam.tsx              # Pantalla de cámara principal
 │   ├── mapa.tsx                # Galería offline, barra de estado Sync, notas, favoritas y álbumes
 │   ├── explore.tsx             # Gestor de Álbumes y métricas SQLite
-│   └── nube.tsx                # Feed remoto con cursor, scroll infinito, búsqueda debounced y Realtime
+│   └── nube.tsx                # Feed remoto con cursor, scroll infinito, búsqueda debounced y Realtime (vía hooks/contexto)
 ├── components/
 │   ├── PermissionPrimer.tsx    # UI para solicitar permisos
 │   ├── SyncMonitorModal.tsx    # Monitor de Estado (pendientes, cursor sync_meta, errores, force sync)
@@ -230,10 +230,12 @@ src/
 ├── hooks/
 │   ├── useAlbumsDB.ts          # Hook reactivo de álbumes
 │   ├── useCamera.ts            # Hook de cámara y permisos
+│   ├── useDatabaseMigrations.ts # Encapsula useMigrations(db, migrations) para mantener SQLite fuera de src/app/
 │   ├── useDebouncedValue.ts    # Debounce para búsqueda remota
 │   ├── useGeoLocation.ts       # Hook GPS en tiempo real
 │   ├── useGeoPhotosDB.ts       # Mutaciones SQLite instantáneas + invalidación de ['sync']
 │   ├── useNetworkOnline.ts     # Conectividad en vivo con expo-network
+│   ├── usePhotosRealtime.ts    # Suscripción WebSocket encapsulada con limpieza e invalidación de queries
 │   ├── usePostsFeed.ts         # useInfiniteQuery con paginación por cursor (created_at < último)
 │   ├── useShake.ts             # Detección de sacudida
 │   └── useSync.ts              # useQuery ['sync'] (refetchOnReconnect/Focus: 'always') + monitor SQLite
@@ -476,6 +478,20 @@ create trigger trg_photos_server_updated_at
 create index if not exists idx_photos_user_server_updated_at
   on public.photos (user_id, server_updated_at);
 ```
+
+### 🧪 Matriz de Pruebas para C6
+
+> **Nota:** Completa la columna **Resultado real observado** con las evidencias obtenidas al ejecutar cada escenario manualmente en los dispositivos físicos (A y B).
+
+| # | Escenario | Resultado esperado | Implementación verificada en código | Resultado real observado (Dispositivo) |
+|---|---|---|---|---|
+| 1 | Foto tomada sin conexión; luego se reconecta | Se sube sola; pendientes vuelve a `0` | `addPhoto` guarda en SQLite (`syncedAt = null`) e invalida `['sync']`; `onlineManager` + `useSync` (`refetchOnReconnect: 'always'`) ejecutan `Pull → Push` al recuperar red y aplican `markSynced`. | ⏳ Pendiente de ejecución en dispositivo |
+| 2 | Foto creada en el teléfono A | Aparece en B con imagen y ubicación | Teléfono A sube binario a Storage y metadatos (`latitude`, `longitude`) vía Push; Teléfono B recibe evento Realtime (`usePhotosRealtime`) o Pull (`server_updated_at > cursor`), descarga vía Signed URL a `documentDirectory` y actualiza SQLite + feed. | ⏳ Pendiente de ejecución en dispositivo |
+| 3 | Nota editada en A y después en B, ambos sin conexión | En los dos queda la nota de B | `remoteWins(localUpdatedAt, remoteUpdatedAt)` en `syncConflicts.ts` compara timestamps ISO (Last-Write-Wins); al sincronizar B (último en editar) prevalece su nota en Supabase y el siguiente Pull en A actualiza SQLite local. | ⏳ Pendiente de ejecución en dispositivo |
+| 4 | Foto borrada en A | Desaparece en B y del bucket | Borrado en A marca `deletedAt` y `updatedAt`; Push hace upsert de `deleted_at` y elimina el objeto del bucket `geocam`; Pull en B aplica `softDeleteById` y elimina el archivo físico local (`FileSystem`). | ⏳ Pendiente de ejecución en dispositivo |
+| 5 | Foto editada en A y borrada después en B, ambos sin conexión | Queda borrada en los dos (el borrado es el último cambio) | Tanto edición como borrado actualizan `updatedAt`; al ser mayor el timestamp de B, `remoteWins()` aplica en A el registro remoto con `deleted_at` y ejecuta el borrado lógico y limpieza local. | ⏳ Pendiente de ejecución en dispositivo |
+| 6 | Se corta la red a mitad de una sincronización de 5 fotos | Al reconectar termina sin duplicar filas ni archivos | Cada fila en `pushLocalPendingChanges` usa `client_id` (UUID único) con `upsert(..., { onConflict: 'client_id' })` y avanza `markSynced` individualmente dentro de su `try/catch`; el cursor de Pull avanza fila a fila en `sync_meta`. | ⏳ Pendiente de ejecución en dispositivo |
+| 7 | Se cierra la app con fotos pendientes y se abre con red | Se sincroniza al abrir | Las filas pendientes persisten en SQLite (`syncedAt IS NULL \|\| syncedAt < updatedAt`); al iniciar la sesión autenticada, `GeoPhotosProvider` monta `useSync` y dispara automáticamente `runSyncCycle()`. | ⏳ Pendiente de ejecución en dispositivo |
 
 ---
 

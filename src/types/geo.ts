@@ -31,3 +31,36 @@ export interface GeoPhoto {
   deletedAt?: number | null;
   syncStatus: SyncStatus;
 }
+
+export interface GeoAlbum {
+  id: number;
+  name: string;
+  description: string | null;
+  createdAt: number;
+}
+
+export interface RemotePhoto {
+  id: number;
+  user_id: string;
+  client_id: string;
+  storage_path: string;
+  latitude: number | null;
+  longitude: number | null;
+  note: string | null;
+  favorite: boolean;
+  source: PhotoSource;
+  taken_at: string;
+  updated_at: string;
+  created_at: string;
+  server_updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface RemotePhotoFeedItem extends RemotePhoto {
+  signedUrl?: string;
+}
+
+export interface RemoteFeedPage {
+  items: RemotePhotoFeedItem[];
+  nextCursor: string | null;
+}

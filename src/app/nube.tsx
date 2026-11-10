@@ -4,10 +4,10 @@
 // - useInfiniteQuery con initialPageParam: null as string | null y paginación por cursor (created_at < último)
 // - Comprobación de carga v5 con status === 'pending' (sin 'loading' ni cacheTime)
 // - Validación hasNextPage && !isFetchingNextPage en onEndReached
-// - Suscripción Realtime con limpieza estricta (supabase.removeChannel)
+// - Suscripción Realtime encapsulada en hook usePhotosRealtime con limpieza estricta
 // - Borrado lógico sincronizado (sin comandos DELETE directos)
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -21,25 +21,19 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useQueryClient } from '@tanstack/react-query';
 import { SyncMonitorModal } from '@/components/SyncMonitorModal';
 import { useAuth } from '@/context/AuthContext';
 import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useNetworkOnline } from '@/hooks/useNetworkOnline';
+import { usePhotosRealtime } from '@/hooks/usePhotosRealtime';
 import { usePostsFeed } from '@/hooks/usePostsFeed';
-import { supabase } from '@/lib/supabase';
-import { photoRepository } from '@/repositories/photoRepository';
-import {
-  softDeleteRemotePhoto,
-  type RemotePhotoFeedItem,
-} from '@/services/cloudPhotos';
+import type { RemotePhotoFeedItem } from '@/types/geo';
 
 export default function NubeScreen() {
   const { user } = useAuth();
-  const { monitorState, removePhoto } = useGeoPhotos();
+  const { monitorState, deleteCloudFeedPhoto } = useGeoPhotos();
   const { isOnline } = useNetworkOnline();
-  const queryClient = useQueryClient();
 
   const [searchText, setSearchText] = useState('');
   const [monitorOpen, setMonitorOpen] = useState(false);
@@ -57,27 +51,8 @@ export default function NubeScreen() {
     refetch,
   } = usePostsFeed(user?.id, debouncedSearch);
 
-  // Suscripción en Tiempo Real (Realtime) con limpieza estricta
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const channel = supabase
-      .channel('public:photos')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'photos' },
-        (payload) => {
-          console.log('[Realtime] Cambio detectado en public.photos:', payload.eventType);
-          void queryClient.invalidateQueries({ queryKey: ['posts-feed'] });
-          void queryClient.invalidateQueries({ queryKey: ['sync'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, queryClient]);
+  // Suscripción Realtime encapsulada en hook de capa 2 con limpieza estricta
+  usePhotosRealtime(user?.id);
 
   const handleRefresh = () => {
     if (!isOnline) {
@@ -109,21 +84,7 @@ export default function NubeScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const local = await photoRepository.getByClientId(photo.client_id);
-              if (local) {
-                await removePhoto(local.id);
-              } else {
-                if (!isOnline) {
-                  Alert.alert(
-                    'Sin conexión',
-                    'Este elemento aún no existe localmente; conéctate para eliminarlo de la nube.'
-                  );
-                  return;
-                }
-                await softDeleteRemotePhoto(photo);
-                await queryClient.invalidateQueries({ queryKey: ['sync'] });
-              }
-              await queryClient.invalidateQueries({ queryKey: ['posts-feed'] });
+              await deleteCloudFeedPhoto(photo, isOnline);
             } catch (err: any) {
               Alert.alert(
                 'Error',
@@ -222,34 +183,83 @@ export default function NubeScreen() {
         )}
       </View>
 
-      {/* Banner de error si falló la consulta remota */}
-      {status === 'error' && error && (
+      {/* Banner de error con Reintentar si falló la consulta manteniendo datos en caché */}
+      {status === 'error' && error && items.length > 0 && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>
             ⚠️ Error al consultar la nube: {error.message}
           </Text>
+          <Pressable
+            onPress={handleRefresh}
+            disabled={isRefetching}
+            style={[styles.retryMiniBtn, isRefetching && styles.btnDisabled]}
+          >
+            <Text style={styles.retryMiniBtnText}>
+              {isRefetching ? '⏳...' : 'Reintentar'}
+            </Text>
+          </Pressable>
         </View>
       )}
 
-      {/* Lista de Fotos Remotas con Paginación por Cursor */}
+      {/* Lista de Fotos Remotas con Paginación por Cursor y Estados Explícitos (Error, Offline, Vacío) */}
       {items.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>☁️</Text>
-          <Text style={styles.emptyTitle}>
-            {debouncedSearch
-              ? 'Sin resultados para tu búsqueda'
-              : !isOnline && status === 'pending'
-              ? 'Feed remoto sin caché offline aún'
-              : 'Sin fotos en la nube'}
-          </Text>
-          <Text style={styles.emptyText}>
-            {debouncedSearch
-              ? `No se encontraron publicaciones que coincidan con "${debouncedSearch}".`
-              : !isOnline && status === 'pending'
-              ? 'Conéctate una vez a internet para descargar y persistir el muro remoto en caché.'
-              : 'Tus fotos sincronizadas aparecerán aquí automáticamente gracias a la cola Pull → Push en segundo plano.'}
-          </Text>
-        </View>
+        status === 'error' && error ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>⚠️</Text>
+            <Text style={styles.emptyTitle}>Error al consultar la nube</Text>
+            <Text style={styles.emptyText}>
+              {error.message || 'No se pudo conectar con el servidor remoto.'}
+            </Text>
+            <Pressable
+              onPress={handleRefresh}
+              disabled={isRefetching}
+              style={[styles.retryBtn, isRefetching && styles.btnDisabled]}
+            >
+              <Text style={styles.retryBtnText}>
+                {isRefetching ? '⏳ Reintentando...' : '🔄 Reintentar'}
+              </Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>
+              {debouncedSearch ? '🔍' : !isOnline ? '📴' : '☁️'}
+            </Text>
+            <Text style={styles.emptyTitle}>
+              {debouncedSearch
+                ? 'Sin resultados para tu búsqueda'
+                : !isOnline
+                ? 'Sin conexión y sin caché offline'
+                : 'Sin fotos en la nube'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {debouncedSearch
+                ? `No se encontraron publicaciones que coincidan con "${debouncedSearch}".`
+                : !isOnline
+                ? 'Conéctate a internet y presiona Reintentar para descargar y guardar el muro remoto en caché.'
+                : 'Tus fotos sincronizadas aparecerán aquí automáticamente gracias a la cola Pull → Push en segundo plano.'}
+            </Text>
+            {debouncedSearch ? (
+              <Pressable onPress={() => setSearchText('')} style={styles.retryBtn}>
+                <Text style={styles.retryBtnText}>Limpiar búsqueda</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={handleRefresh}
+                disabled={isRefetching}
+                style={[styles.retryBtn, isRefetching && styles.btnDisabled]}
+              >
+                <Text style={styles.retryBtnText}>
+                  {isRefetching
+                    ? '⏳ Actualizando...'
+                    : !isOnline
+                    ? '🔄 Reintentar conexión'
+                    : '🔄 Actualizar'}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        )
       ) : (
         <FlatList
           data={items}
@@ -466,6 +476,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
     backgroundColor: 'rgba(239,68,68,0.16)',
     marginHorizontal: 16,
     marginTop: 8,
@@ -475,8 +489,35 @@ const styles = StyleSheet.create({
     borderLeftColor: '#ef4444',
   },
   errorBannerText: {
+    flex: 1,
     color: '#fca5a5',
     fontSize: 12,
+  },
+  retryMiniBtn: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  retryMiniBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  retryBtn: {
+    marginTop: 6,
+    backgroundColor: '#0a7ea4',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  btnDisabled: {
+    opacity: 0.6,
   },
   list: {
     padding: 16,

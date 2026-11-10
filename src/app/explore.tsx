@@ -11,10 +11,10 @@ import {
   View,
 } from 'react-native';
 import { useGeoPhotos } from '@/context/GeoPhotosContext';
-import type { Album } from '@/db/schema';
+import type { GeoAlbum } from '@/types/geo';
 
 export default function ExploreScreen() {
-  const { photos, albums, createAlbum, removeAlbum, setFilter } = useGeoPhotos();
+  const { photos, albums, createAlbum, removeAlbum } = useGeoPhotos();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [name, setName] = useState('');
@@ -87,7 +87,7 @@ export default function ExploreScreen() {
           </Text>
         </View>
       ) : (
-        <FlatList<Album>
+        <FlatList<GeoAlbum>
           data={albums}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}

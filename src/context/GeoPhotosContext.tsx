@@ -1,12 +1,19 @@
 // src/context/GeoPhotosContext.tsx
 import React, { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { GeoPhoto, Coords, PhotoSource, SyncStatus } from '@/types/geo';
-import type { Album } from '@/db/schema';
+import { useQueryClient } from '@tanstack/react-query';
+import type {
+  GeoAlbum,
+  GeoPhoto,
+  Coords,
+  PhotoSource,
+  RemotePhotoFeedItem,
+  SyncStatus,
+} from '@/types/geo';
 import { useGeoPhotosDB, type PhotoFilter } from '@/hooks/useGeoPhotosDB';
 import { useAlbumsDB } from '@/hooks/useAlbumsDB';
 import { useAuth } from '@/context/AuthContext';
 import { useSync, type SyncMonitorState } from '@/hooks/useSync';
-import type { SyncCycleResult } from '@/services/syncService';
+import { deleteFeedPhoto, type SyncCycleResult } from '@/services/syncService';
 
 // ─── Tipos del contexto ───────────────────────────────────────────────────────
 
@@ -20,16 +27,17 @@ export interface AddPhotoParams {
 
 interface GeoPhotosContextValue {
   photos: GeoPhoto[];
-  albums: Album[];
+  albums: GeoAlbum[];
   filter: PhotoFilter;
   setFilter: (f: PhotoFilter) => void;
   addPhoto: (params: AddPhotoParams) => Promise<void>;
   removePhoto: (id: number) => Promise<void>;
+  deleteCloudFeedPhoto: (photo: RemotePhotoFeedItem, isOnline: boolean) => Promise<void>;
   clearAll: () => Promise<void>;
   updateNotes: (id: number, notes: string) => Promise<void>;
   toggleFavorite: (id: number, isFavorite: boolean) => Promise<void>;
   setAlbum: (id: number, albumId: number | null) => Promise<void>;
-  createAlbum: (name: string, description?: string) => Promise<Album>;
+  createAlbum: (name: string, description?: string) => Promise<GeoAlbum>;
   removeAlbum: (id: number) => Promise<void>;
   syncPhoto: (id: number) => Promise<void>;
   syncAllPhotos: (
@@ -53,6 +61,7 @@ const GeoPhotosContext = createContext<GeoPhotosContextValue | undefined>(undefi
 export function GeoPhotosProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const ownerId = user?.id ?? null;
+  const queryClient = useQueryClient();
 
   const {
     photos: rawPhotos,
@@ -115,6 +124,15 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     await addPhotoDB(params);
   };
 
+  const deleteCloudFeedPhoto = async (
+    photo: RemotePhotoFeedItem,
+    isOnline: boolean
+  ) => {
+    await deleteFeedPhoto(photo, isOnline);
+    await queryClient.invalidateQueries({ queryKey: ['sync'] });
+    await queryClient.invalidateQueries({ queryKey: ['posts-feed'] });
+  };
+
   const value: GeoPhotosContextValue = {
     photos,
     albums,
@@ -122,6 +140,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     setFilter,
     addPhoto,
     removePhoto,
+    deleteCloudFeedPhoto,
     clearAll,
     updateNotes,
     toggleFavorite,

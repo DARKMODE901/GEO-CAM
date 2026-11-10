@@ -15,6 +15,7 @@ import {
   getSignedUrl,
   pullRemoteChangesBatch,
   removeStorageObject,
+  softDeleteRemotePhoto,
   uploadPhoto,
   upsertPhotoMetadata,
 } from '@/services/cloudPhotos';
@@ -24,6 +25,7 @@ import {
   localFileExists,
 } from '@/services/photoStorage';
 import { remoteWins, toEpochMs } from '@/services/syncConflicts';
+import type { RemotePhotoFeedItem } from '@/types/geo';
 
 const PULL_BATCH_SIZE = 200;
 const MAX_PULL_BATCHES = 50;
@@ -435,4 +437,29 @@ export async function syncSinglePhotoWithPullFirst(
   });
 
   await activeSyncPromise;
+}
+
+/**
+ * Elimina un elemento del Feed Remoto respetando el borrado lógico Offline-First:
+ * - Si existe localmente en SQLite, marca deletedAt para propagarlo en Push.
+ * - Si solo existe en Supabase y hay conexión, ejecuta borrado lógico remoto directo.
+ */
+export async function deleteFeedPhoto(
+  photo: RemotePhotoFeedItem,
+  isOnline: boolean
+): Promise<'local' | 'remote'> {
+  const local = await photoRepository.getByClientId(photo.client_id);
+  if (local) {
+    await photoRepository.delete(local.id);
+    return 'local';
+  }
+
+  if (!isOnline) {
+    throw new Error(
+      'Este elemento aún no existe localmente; conéctate para eliminarlo de la nube.'
+    );
+  }
+
+  await softDeleteRemotePhoto(photo);
+  return 'remote';
 }
