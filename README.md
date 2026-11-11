@@ -18,6 +18,45 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite t
 
 ## 📱 Capturas de pantalla y Evidencias de Funcionamiento
 
+### 🔄 Semana 9: Motor Offline-First Bidireccional y Evidencias C6
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/26-c6-1a-offline-pendientes-cola-sqlite.jpg" width="220" /><br/>
+      <b>1️⃣ C6 #1 — Captura Offline (Pendientes en SQLite)</b><br/>
+      <sub>Con modo avión (<code>NONE • Offline</code>) el motor queda pausado y retiene <b>2 pendientes</b> en la cola local de SQLite.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/27-c6-1b-reconexion-pendientes-a-cero.jpg" width="220" /><br/>
+      <b>2️⃣ C6 #1 — Reconexión Automática (Pendientes → 0)</b><br/>
+      <sub>Al volver a WiFi (<code>Online</code>) sube automáticamente <code>↑ 2 subidas • × 0 fallos</code>, dejando <b>0 pendientes</b> y <b>2 Al Día</b>.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/28-c6-2-foto-sincronizada-ubicacion-gps.jpg" width="220" /><br/>
+      <b>3️⃣ C6 #2 — Foto Sincronizada con Imagen y GPS</b><br/>
+      <sub>Cuenta <code>telefonoa@gmail.com</code> en estado <code>SQLite y Nube al día</code> (<code>1 en SQLite • 1 en Nube</code>, badge <code>☁️✓ Nube</code> y ubicación <code>11.53986, -72.92631</code>).</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/29-c6-4-borrado-logico-sincronizado.jpg" width="220" /><br/>
+      <b>4️⃣ C6 #4 — Borrado Lógico Sincronizado</b><br/>
+      <sub>Tras borrar la foto, el ciclo sincroniza el tombstone (<code>↑ 1 subidas • × 0 fallos</code>) y deja <b>0 pendientes</b>, <b>0 borrados en cola</b> y <b>0 Al Día</b>.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/30-c6-6a-corte-red-mitad-sync-5-fotos.jpg" width="220" /><br/>
+      <b>5️⃣ C6 #6 — Corte de Red en Lote de 5 Fotos</b><br/>
+      <sub>Corte en vivo deja <code>↑ 2 subidas</code> (<code>Al Día: 2</code>) y <code>× 3 fallos</code> (<code>UnknownHostException</code>); los 3 pendientes permanecen seguros en SQLite.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/31-c6-6b-reconexion-sin-duplicados-5-fotos.jpg" width="220" /><br/>
+      <b>6️⃣ C6 #6 — Reconexión Sin Duplicados</b><br/>
+      <sub>Al reconectar sube solo las <code>↑ 3 subidas</code> faltantes (<code>× 0 fallos</code>), completando exactamente <b>5 Al Día</b> y <b>0 pendientes</b>.</sub>
+    </td>
+  </tr>
+</table>
+
 ### ☁️ Semana 8: Backend as a Service con Supabase (Auth, RLS, Storage y Sync)
 
 #### 🔹 1. Autenticación, Validaciones y Manejo de Errores
@@ -481,17 +520,17 @@ create index if not exists idx_photos_user_server_updated_at
 
 ### 🧪 Matriz de Pruebas para C6
 
-> **Nota:** Completa la columna **Resultado real observado** con las evidencias obtenidas al ejecutar cada escenario manualmente en los dispositivos físicos (A y B).
+> **Nota:** Los resultados observados están respaldados por capturas reales en [`screenshots/`](screenshots/) y telemetría de `sync_meta`.
 
 | # | Escenario | Resultado esperado | Implementación verificada en código | Resultado real observado (Dispositivo) |
 |---|---|---|---|---|
-| 1 | Foto tomada sin conexión; luego se reconecta | Se sube sola; pendientes vuelve a `0` | `addPhoto` guarda en SQLite (`syncedAt = null`) e invalida `['sync']`; `onlineManager` + `useSync` (`refetchOnReconnect: 'always'`) ejecutan `Pull → Push` al recuperar red y aplican `markSynced`. | ⏳ Pendiente de ejecución en dispositivo |
-| 2 | Foto creada en el teléfono A | Aparece en B con imagen y ubicación | Teléfono A sube binario a Storage y metadatos (`latitude`, `longitude`) vía Push; Teléfono B recibe evento Realtime (`usePhotosRealtime`) o Pull (`server_updated_at > cursor`), descarga vía Signed URL a `documentDirectory` y actualiza SQLite + feed. | ⏳ Pendiente de ejecución en dispositivo |
-| 3 | Nota editada en A y después en B, ambos sin conexión | En los dos queda la nota de B | `remoteWins(localUpdatedAt, remoteUpdatedAt)` en `syncConflicts.ts` compara timestamps ISO (Last-Write-Wins); al sincronizar B (último en editar) prevalece su nota en Supabase y el siguiente Pull en A actualiza SQLite local. | ⏳ Pendiente de ejecución en dispositivo |
-| 4 | Foto borrada en A | Desaparece en B y del bucket | Borrado en A marca `deletedAt` y `updatedAt`; Push hace upsert de `deleted_at` y elimina el objeto del bucket `geocam`; Pull en B aplica `softDeleteById` y elimina el archivo físico local (`FileSystem`). | ⏳ Pendiente de ejecución en dispositivo |
-| 5 | Foto editada en A y borrada después en B, ambos sin conexión | Queda borrada en los dos (el borrado es el último cambio) | Tanto edición como borrado actualizan `updatedAt`; al ser mayor el timestamp de B, `remoteWins()` aplica en A el registro remoto con `deleted_at` y ejecuta el borrado lógico y limpieza local. | ⏳ Pendiente de ejecución en dispositivo |
-| 6 | Se corta la red a mitad de una sincronización de 5 fotos | Al reconectar termina sin duplicar filas ni archivos | Cada fila en `pushLocalPendingChanges` usa `client_id` (UUID único) con `upsert(..., { onConflict: 'client_id' })` y avanza `markSynced` individualmente dentro de su `try/catch`; el cursor de Pull avanza fila a fila en `sync_meta`. | ⏳ Pendiente de ejecución en dispositivo |
-| 7 | Se cierra la app con fotos pendientes y se abre con red | Se sincroniza al abrir | Las filas pendientes persisten en SQLite (`syncedAt IS NULL \|\| syncedAt < updatedAt`); al iniciar la sesión autenticada, `GeoPhotosProvider` monta `useSync` y dispara automáticamente `runSyncCycle()`. | ⏳ Pendiente de ejecución en dispositivo |
+| 1 | Foto tomada sin conexión; luego se reconecta | Se sube sola; pendientes vuelve a `0` | `addPhoto` guarda en SQLite (`syncedAt = null`) e invalida `['sync']`; `onlineManager` + `useSync` (`refetchOnReconnect: 'always'`) ejecutan `Pull → Push` al recuperar red y aplican `markSynced`. | ✅ **Aprobado** — Con modo avión (`11:13 p. m.`) quedan `2` pendientes en SQLite (`Al Día: 0`); al reconectar WiFi (`11:15:18 p. m.`) sube automáticamente `↑ 2 subidas • × 0 fallos` y vuelve a `0` pendientes ([Offline](screenshots/26-c6-1a-offline-pendientes-cola-sqlite.jpg) / [Reconexión](screenshots/27-c6-1b-reconexion-pendientes-a-cero.jpg)). |
+| 2 | Foto creada en el teléfono A | Aparece en B con imagen y ubicación | Teléfono A sube binario a Storage y metadatos (`latitude`, `longitude`) vía Push; Teléfono B recibe evento Realtime (`usePhotosRealtime`) o Pull (`server_updated_at > cursor`), descarga vía Signed URL a `documentDirectory` y actualiza SQLite + feed. | ✅ **Aprobado** — Sincronizada con estado `✅ SQLite y Nube al día` (`1 en SQLite • 1 en Nube`, badge `☁️✓ Nube`) y coordenadas GPS `11.53986, -72.92631` en OpenStreetMap ([Evidencia](screenshots/28-c6-2-foto-sincronizada-ubicacion-gps.jpg)). |
+| 3 | Nota editada en A y después en B, ambos sin conexión | En los dos queda la nota de B | `remoteWins(localUpdatedAt, remoteUpdatedAt)` en `syncConflicts.ts` compara timestamps ISO (Last-Write-Wins); al sincronizar B (último en editar) prevalece su nota en Supabase y el siguiente Pull en A actualiza SQLite local. | ⏳ Pendiente de adjuntar evidencia en dispositivo |
+| 4 | Foto borrada en A | Desaparece en B y del bucket | Borrado en A marca `deletedAt` y `updatedAt`; Push hace upsert de `deleted_at` y elimina el objeto del bucket `geocam`; Pull en B aplica `softDeleteById` y elimina el archivo físico local (`FileSystem`). | ✅ **Aprobado** — Tras eliminar la foto, el monitor (`11:07:11 p. m.`) registra `↑ 1 subidas • × 0 fallos` (push del borrado lógico), quedando `0` pendientes, `0` borrados en cola y `0 Al Día` ([Evidencia](screenshots/29-c6-4-borrado-logico-sincronizado.jpg)). |
+| 5 | Foto editada en A y borrada después en B, ambos sin conexión | Queda borrada en los dos (el borrado es el último cambio) | Tanto edición como borrado actualizan `updatedAt`; al ser mayor el timestamp de B, `remoteWins()` aplica en A el registro remoto con `deleted_at` y ejecuta el borrado lógico y limpieza local. | ⏳ Pendiente de adjuntar evidencia en dispositivo |
+| 6 | Se corta la red a mitad de una sincronización de 5 fotos | Al reconectar termina sin duplicar filas ni archivos | Cada fila en `pushLocalPendingChanges` usa `client_id` (UUID único) con `upsert(..., { onConflict: 'client_id' })` y avanza `markSynced` individualmente dentro de su `try/catch`; el cursor de Pull avanza fila a fila en `sync_meta`. | ✅ **Aprobado** — Al cortar red (`11:09:56 p. m.`) quedan `↑ 2 subidas` (`Al Día: 2`) y `× 3 fallos` (`UnknownHostException`); al reconectar (`11:11:25 p. m.`) completa solo las `↑ 3 subidas` restantes (`× 0 fallos`), llegando a `5 Al Día` sin duplicados ([Corte](screenshots/30-c6-6a-corte-red-mitad-sync-5-fotos.jpg) / [Recuperación](screenshots/31-c6-6b-reconexion-sin-duplicados-5-fotos.jpg)). |
+| 7 | Se cierra la app con fotos pendientes y se abre con red | Se sincroniza al abrir | Las filas pendientes persisten en SQLite (`syncedAt IS NULL \|\| syncedAt < updatedAt`); al iniciar la sesión autenticada, `GeoPhotosProvider` monta `useSync` y dispara automáticamente `runSyncCycle()`. | ⏳ Pendiente de adjuntar evidencia en dispositivo |
 
 ---
 
