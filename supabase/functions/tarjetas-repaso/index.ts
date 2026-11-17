@@ -39,7 +39,8 @@ Deno.serve(
       const google = createGoogleGenerativeAI({ apiKey });
 
       // C5: Control de límite diario en Supabase
-      const userId = ctx.userClaims?.sub;
+      // En @supabase/server, ctx.userClaims normaliza el sub como .id (o en ctx.jwtClaims?.sub)
+      const userId = ctx.userClaims?.id ?? (ctx.userClaims as any)?.sub ?? (ctx.jwtClaims as any)?.sub;
       if (!userId) {
         return new Response(
           JSON.stringify({ error: 'No autorizado: usuario no identificado.' }),

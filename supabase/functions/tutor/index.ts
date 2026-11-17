@@ -43,7 +43,8 @@ Deno.serve(
       const google = createGoogleGenerativeAI({ apiKey });
 
       // C5: Control de límite diario (Rate Limiting) en Supabase
-      const userId = ctx.userClaims?.sub;
+      // En @supabase/server, ctx.userClaims normaliza el sub como .id (o en ctx.jwtClaims?.sub)
+      const userId = ctx.userClaims?.id ?? (ctx.userClaims as any)?.sub ?? (ctx.jwtClaims as any)?.sub;
       if (!userId) {
         return new Response(
           JSON.stringify({ error: 'No autorizado: usuario no identificado.' }),
@@ -90,7 +91,7 @@ Deno.serve(
 
       // C2: Validar perfil dinámico con Zod y construir instrucciones
       const perfil = PerfilSchema.parse(perfilRaw);
-      const userEmail = ctx.userClaims?.email ?? 'usuario';
+      const userEmail = ctx.userClaims?.email ?? (ctx.jwtClaims as any)?.email ?? 'usuario';
 
       const instructions = `Eres el Tutor IA oficial de GeoCam, un asistente educativo experto en geografía, arquitectura urbana, naturaleza y viajes.
 Estás conversando con el usuario ${perfil.nombre} (${userEmail}).
@@ -114,6 +115,7 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
         stream: toUIMessageStream({
           stream: result.stream,
           onError: (error) => {
+            console.error('[tutor] Error en stream de Gemini:', error);
             const real = RetryError.isInstance(error) ? error.lastError : error;
             if (APICallError.isInstance(real) && real.statusCode === 429) {
               return 'Se ha alcanzado temporalmente la cuota gratuita de Gemini. Por favor, espera un minuto antes de continuar la conversación.';

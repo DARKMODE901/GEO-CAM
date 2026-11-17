@@ -286,6 +286,10 @@
    - *Error Detectado:* Al agregar la pestaña del Tutor IA a `NativeTabs` en `app-tabs.tsx`, el número total de pestañas subió a 6 (`index`, `geocam`, `mapa`, `explore`, `nube`, `tutor`). En Android, el componente nativo `BottomNavigationView` lanza una excepción fatal si se configuran más de 5 pestañas.
    - *Corrección Aplicada:* Se eliminó el trigger redundante de `index` (que solo redirige a `geocam`), dejando exactamente las 5 pestañas operativas: Cámara, Mapa, Álbumes, Nube y Tutor IA.
 
+6. **Extracción errónea de `userId` en `@supabase/server` (`ctx.userClaims?.sub` vs `ctx.userClaims?.id`):**
+   - *Error Detectado:* Al invocar las Edge Functions autenticadas, `@supabase/server` normaliza las claims del JWT en camelCase y asigna `id: jwtClaims.sub`. La función intentaba leer `ctx.userClaims?.sub`, el cual siempre retornaba `undefined`. Esto provocaba que cualquier solicitud de un usuario autenticado fuera erróneamente rechazada con HTTP 401 (`No autorizado: usuario no identificado`), lo que en el cliente se manifestaba como *"Error al comunicarse con Gemini"* y arrojaba advertencias `WARN [tutor] Error en useChat` en la consola de Metro.
+   - *Corrección Aplicada:* Se corrigió la extracción en `tutor/index.ts`, `describir-foto/index.ts` y `tarjetas-repaso/index.ts` utilizando `const userId = ctx.userClaims?.id ?? (ctx.userClaims as any)?.sub ?? (ctx.jwtClaims as any)?.sub;`, garantizando la identificación inequívoca del usuario autenticado y el correcto funcionamiento del Rate Limiting (`uso_ia`) y las respuestas de Gemini.
+
 
 
 
