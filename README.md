@@ -18,6 +18,45 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite t
 
 ## 📱 Capturas de pantalla y Evidencias de Funcionamiento
 
+### 🤖 Semana 10: Inteligencia Artificial Multimodal y Retos de Producto (Tag v2.0.0)
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/32-s10-tutor-streaming.jpg" width="220" /><br/>
+      <b>1️⃣ Tutor IA con Streaming</b><br/>
+      <sub>Transmisión en tiempo real palabra por palabra con Vercel AI SDK v7 y botón de stop para abortar.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/33-s10-tutor-multimodal.jpg" width="220" /><br/>
+      <b>2️⃣ Análisis Multimodal de Fotos</b><br/>
+      <sub>Envío de fotografía reducida a &lt; 300 KB con análisis de paisaje, arquitectura y contexto geográfico.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/34-s10-geocam-ve-detalle.jpg" width="220" /><br/>
+      <b>3️⃣ Taller "GeoCam Ve"</b><br/>
+      <sub>Botón "Describir con IA" con aviso de privacidad de Gemini, spinner y sugerencia en TextInput editable.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="screenshots/35-s10-tarjetas-repaso-c3.jpg" width="220" /><br/>
+      <b>4️⃣ Reto C3 — Tarjetas de Repaso</b><br/>
+      <sub>Salida estructurada con Zod (<code>generateText</code> + <code>Output.object</code>) y flashcards interactivas volteables.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/36-s10-perfil-dinamico-c2.jpg" width="220" /><br/>
+      <b>5️⃣ Reto C2 — Perfil Dinámico</b><br/>
+      <sub>Modal de personalización (Nombre, Tema, Nivel) con validación Zod <code>.catch()</code> en el servidor.</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="screenshots/37-s10-rate-limit-c5.jpg" width="220" /><br/>
+      <b>6️⃣ Reto C5 — Rate Limiting 429</b><br/>
+      <sub>Control diario en Supabase con tabla <code>uso_ia</code> y RLS: respuesta inmediata 429 "Vuelve mañana".</sub>
+    </td>
+  </tr>
+</table>
+
 ### 🔄 Semana 9: Motor Offline-First Bidireccional y Evidencias C6
 
 <table>
@@ -531,6 +570,160 @@ create index if not exists idx_photos_user_server_updated_at
 | 5 | Foto editada en A y borrada después en B, ambos sin conexión | Queda borrada en los dos (el borrado es el último cambio) | Tanto edición como borrado actualizan `updatedAt`; al ser mayor el timestamp de B, `remoteWins()` aplica en A el registro remoto con `deleted_at` y ejecuta el borrado lógico y limpieza local. | ⏳ Pendiente de adjuntar evidencia en dispositivo |
 | 6 | Se corta la red a mitad de una sincronización de 5 fotos | Al reconectar termina sin duplicar filas ni archivos | Cada fila en `pushLocalPendingChanges` usa `client_id` (UUID único) con `upsert(..., { onConflict: 'client_id' })` y avanza `markSynced` individualmente dentro de su `try/catch`; el cursor de Pull avanza fila a fila en `sync_meta`. | ✅ **Aprobado** — Al cortar red (`11:09:56 p. m.`) quedan `↑ 2 subidas` (`Al Día: 2`) y `× 3 fallos` (`UnknownHostException`); al reconectar (`11:11:25 p. m.`) completa solo las `↑ 3 subidas` restantes (`× 0 fallos`), llegando a `5 Al Día` sin duplicados ([Corte](screenshots/30-c6-6a-corte-red-mitad-sync-5-fotos.jpg) / [Recuperación](screenshots/31-c6-6b-reconexion-sin-duplicados-5-fotos.jpg)). |
 | 7 | Se cierra la app con fotos pendientes y se abre con red | Se sincroniza al abrir | Las filas pendientes persisten en SQLite (`syncedAt IS NULL \|\| syncedAt < updatedAt`); al iniciar la sesión autenticada, `GeoPhotosProvider` monta `useSync` y dispara automáticamente `runSyncCycle()`. | ⏳ Pendiente de adjuntar evidencia en dispositivo |
+
+---
+
+## 🤖 Semana 10: Inteligencia Artificial Multimodal y Retos de Producto (Tag `v2.0.0`)
+
+En la **Semana 10**, GeoCam se transforma en un asistente de exploración geográfica inteligente integrando **Google Gemini (`gemini-3.8-flash`)** mediante una arquitectura de **Proxy Seguro** en **Supabase Edge Functions** y el motor de **Vercel AI SDK v7**.
+
+### 🛡️ Reglas de Oro de Seguridad y Arquitectura Proxy
+
+```
+┌─────────────────────────────────┐
+│     GeoCam App (Cliente)        │
+│  - React Native / Expo SDK 58   │
+│  - Sin clave de Gemini (AIza)   │
+│  - Envía JWT de sesión Supabase │
+└────────────────┬────────────────┘
+                 │ (1) Bearer Token + apikey
+                 ▼
+┌──────────────────────────────────────────────┐
+│       Supabase Edge Functions (Deno)         │
+│  - withSupabase({ auth: 'user' }) (401 auto) │
+│  - Rate Limiting en tabla uso_ia con RLS     │
+│  - Lee GEMINI_API_KEY desde Secretos         │
+└────────────────┬─────────────────────────────┘
+                 │ (2) Invocación Segura con SDK v7
+                 ▼
+┌──────────────────────────────────────────────┐
+│       Google Gemini API (Cloud)              │
+│  - gemini-3.8-flash                          │
+│  - Streaming multimodal / Output.object      │
+└──────────────────────────────────────────────┘
+```
+
+1. **Prohibición absoluta de API Key en el cliente:** Jamás se usa `EXPO_PUBLIC_GEMINI_API_KEY` ni llaves `AIza...` en el `.env` móvil ni en el código.
+2. **Arquitectura Proxy:** La app envía su token de sesión a Supabase Edge Functions; el servidor valida el token (`withSupabase({ auth: 'user' })`) y es el único autorizado a consumir la API de Gemini leyendo el secreto `GEMINI_API_KEY`.
+3. **Claves públicas permitidas:** Únicamente `EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+4. **Vercel AI SDK v7 Estricto:**
+   - Prompt de sistema obligatorio mediante la propiedad `instructions:` (prohibido `system:`).
+   - Respuestas estructuradas con `generateText` + `output: Output.object({ schema })` validado con Zod (reemplazando al retirado `generateObject`).
+   - Modelo por defecto: `gemini-3.8-flash` (respaldo: `gemini-3.5-flash-lite`).
+
+---
+
+### 📦 Supabase Edge Functions Implementadas
+
+1. **`supabase/functions/tutor/index.ts`**
+   - Chat interactivo con streaming en tiempo real (`streamText` + `toUIMessageStream`).
+   - Soporte multimodal para análisis de fotos geográficas comprimidas a &lt; 300 KB.
+   - Ventana deslizante de contexto (`messages.slice(-20)`).
+   - Inyección dinámica de perfil de usuario (`ctx.userClaims.email` + `perfil` validado con Zod).
+   - Control de cuota y rate limiting (C5) con tabla `uso_ia`.
+   - Manejo amigable de errores 429 desempaquetando `RetryError` / `APICallError`.
+
+2. **`supabase/functions/describir-foto/index.ts`**
+   - Taller "GeoCam Ve": describe fotografías en 1 o 2 frases breves en español neutro.
+   - Invocación con `generateText` (sin streaming).
+   - Formato de imagen: `{ type: 'file', mediaType: 'image/jpeg', data: cleanBase64 }`.
+   - Protegida con autenticación de usuario y conteo de límite diario.
+
+3. **`supabase/functions/tarjetas-repaso/index.ts` (Reto C3)**
+   - Generación de salida estructurada JSON validada con Zod.
+   - Implementa estrictamente `generateText` + `output: Output.object({ schema: TarjetasSchema })`.
+   - Retorna entre 3 y 5 flashcards de estudio (`pregunta` y `respuesta`).
+
+---
+
+### 🗄️ Migraciones de Base de Datos (Semana 10)
+
+#### Supabase PostgreSQL (`supabase/migrations_week10.sql`):
+```sql
+-- 1. Columna ai_description en fotos
+alter table public.photos add column if not exists ai_description text;
+
+-- 2. Tabla de Rate Limiting con RLS
+create table if not exists public.uso_ia (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  funcion text not null,
+  created_at timestamp with time zone default now() not null
+);
+
+alter table public.uso_ia enable row level security;
+
+create policy "Users can select own ai usage" on public.uso_ia
+  for select to authenticated using ((select auth.uid()) = user_id);
+
+create policy "Users can insert own ai usage" on public.uso_ia
+  for insert to authenticated with check ((select auth.uid()) = user_id);
+-- PROHIBIDO: No existe política de DELETE (el usuario no puede borrar su registro de uso).
+```
+
+#### SQLite / Drizzle ORM (`src/drizzle/0004_minor_colossus.sql`):
+```sql
+CREATE TABLE IF NOT EXISTS `chat_messages` (
+  `id` text PRIMARY KEY NOT NULL,
+  `role` text NOT NULL,
+  `content` text NOT NULL,
+  `parts` text,
+  `created_at` integer NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE `photos` ADD `ai_description` text;
+```
+
+---
+
+### 🏆 Retos de Producto Implementados (C1 a C6)
+
+* **C1. Historial de Chat Persistente en SQLite:**
+  - Tabla `chat_messages` con carga inicial asíncrona antes de montar `useChat`.
+  - Guardado en segundo plano con `chatRepository.upsertMany` en `onFinish`.
+  - Botón "Nueva conversación" con diálogo de confirmación que purga el estado y la tabla en SQLite.
+* **C2. Instrucciones Dinámicas con Perfil Validado:**
+  - Modal de configuración de perfil: Nombre, Tema y Nivel pedagógico (`Principiante`, `Intermedio`, `Avanzado`).
+  - Envío automático en `DefaultChatTransport({ body: async () => ({ perfil }) })`.
+  - Validación con Zod usando `.catch()` en el backend para asignar valores seguros ante datos malformados.
+* **C3. Salida Estructurada (Tarjetas de Repaso):**
+  - Generación de tarjetas pedagógicas usando `generateText` + `output: Output.object({ schema })`.
+  - Visor interactivo móvil con flashcards volteables al tacto.
+* **C4. Manejo Integral de Errores y Estados de Red:**
+  - Monitoreo de conectividad con `expo-network`.
+  - Banner ámbar cuando no hay red y bloqueo de botones de envío.
+  - Cierre automático de sesión (`supabase.auth.signOut()`) ante errores 401 (token expirado).
+  - Manejo diferenciado de error 429 (límite de cuota) con botón de reintento (`regenerate()`).
+* **C5. Control de Límite Diario en Supabase (Rate Limiting):**
+  - Verificación de conteo en `uso_ia` de las últimas 24 horas usando el cliente de usuario (`ctx.supabase`).
+  - Respuesta HTTP 429 inmediata con mensaje "Vuelve mañana" si `count >= LIMITE_DIARIO`.
+* **C6. Auditoría de Seguridad y Entregables:**
+  - Verificación estricta de ausencia de claves `AIza` en todo el repositorio.
+  - Matriz de escenarios en [`PRUEBAS.md`](PRUEBAS.md).
+  - Bitácora de errores de IA detectados y corregidos en [`AI-LOG.md`](AI-LOG.md).
+
+---
+
+### ⚙️ Despliegue de Edge Functions en Supabase
+
+Para desplegar las Edge Functions en tu proyecto de Supabase:
+
+```bash
+# 1. Iniciar sesión en Supabase CLI
+npx supabase login
+
+# 2. Vincular el proyecto
+npx supabase link --project-ref andbapgbamsixuopnsvl
+
+# 3. Configurar el secreto de Gemini en Supabase
+npx supabase secrets set GEMINI_API_KEY="AIzaSy..." LIMITE_DIARIO="20" GEMINI_MODEL="gemini-3.8-flash"
+
+# 4. Desplegar las funciones
+npx supabase functions deploy tutor --no-verify-jwt
+npx supabase functions deploy describir-foto --no-verify-jwt
+npx supabase functions deploy tarjetas-repaso --no-verify-jwt
+```
+> **Nota sobre `--no-verify-jwt`:** Dado que las funciones utilizan internamente `withSupabase({ auth: 'user' })`, la validación del JWT la realiza la propia función a nivel de código de forma robusta.
 
 ---
 

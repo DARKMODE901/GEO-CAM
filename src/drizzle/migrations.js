@@ -3,28 +3,9 @@
 import journal from './meta/_journal.json';
 import m0000 from './0000_init_albums_and_photos.sql';
 import m0001 from './0001_add_notes_and_favorites.sql';
-
-// Definición directa de m0002 para garantizar que Metro no use caché desactualizada
-const m0002 = `ALTER TABLE photos ADD COLUMN client_id TEXT DEFAULT '';
---> statement-breakpoint
-ALTER TABLE photos ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0;
---> statement-breakpoint
-ALTER TABLE photos ADD COLUMN remote_path TEXT;
---> statement-breakpoint
-ALTER TABLE photos ADD COLUMN synced_at INTEGER;
---> statement-breakpoint
-ALTER TABLE photos ADD COLUMN owner_id TEXT;`;
-
-const m0003 = `ALTER TABLE photos ADD COLUMN deleted_at INTEGER;
---> statement-breakpoint
-CREATE TABLE IF NOT EXISTS sync_meta (
-  key TEXT PRIMARY KEY NOT NULL,
-  value TEXT NOT NULL
-);
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS idx_photos_client_id ON photos (client_id);
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS idx_photos_deleted_at ON photos (deleted_at);`;
+import m0002 from './0002_add_sync_fields.sql';
+import m0003 from './0003_add_sync_meta_and_deleted_at.sql';
+import m0004 from './0004_minor_colossus.sql';
 
 export default {
   journal,
@@ -33,5 +14,6 @@ export default {
     m0001,
     m0002,
     m0003,
+    m0004,
   },
 };

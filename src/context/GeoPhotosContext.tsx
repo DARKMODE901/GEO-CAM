@@ -35,6 +35,7 @@ interface GeoPhotosContextValue {
   deleteCloudFeedPhoto: (photo: RemotePhotoFeedItem, isOnline: boolean) => Promise<void>;
   clearAll: () => Promise<void>;
   updateNotes: (id: number, notes: string) => Promise<void>;
+  setDescription: (id: number, description: string) => Promise<void>;
   toggleFavorite: (id: number, isFavorite: boolean) => Promise<void>;
   setAlbum: (id: number, albumId: number | null) => Promise<void>;
   createAlbum: (name: string, description?: string) => Promise<GeoAlbum>;
@@ -71,6 +72,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     removePhoto,
     clearAll,
     updateNotes,
+    setDescription,
     toggleFavorite,
     setAlbum,
     syncPhoto,
@@ -115,6 +117,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
         syncedAt: p.syncedAt,
         ownerId: p.ownerId,
         deletedAt: p.deletedAt,
+        aiDescription: p.aiDescription,
         syncStatus,
       };
     });
@@ -143,6 +146,7 @@ export function GeoPhotosProvider({ children }: { children: ReactNode }) {
     deleteCloudFeedPhoto,
     clearAll,
     updateNotes,
+    setDescription,
     toggleFavorite,
     setAlbum,
     createAlbum,

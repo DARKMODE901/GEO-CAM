@@ -5,11 +5,11 @@ import { createClient } from '@supabase/supabase-js';
 import { AppState } from 'react-native';
 import { secureStorage } from './secureStorage';
 
-const supabaseUrl =
+export const supabaseUrl =
   process.env.EXPO_PUBLIC_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   '';
-const supabaseAnonKey =
+export const supabaseAnonKey =
   process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
   '';

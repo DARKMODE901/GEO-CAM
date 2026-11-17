@@ -71,6 +71,7 @@ export async function upsertPhotoMetadata(data: {
   takenAt: string; // ISO string
   updatedAt: string; // ISO string
   deletedAt?: string | null; // ISO string para borrado lógico
+  aiDescription?: string | null;
 }): Promise<void> {
   const { error } = await supabase.from('photos').upsert(
     {
@@ -85,6 +86,7 @@ export async function upsertPhotoMetadata(data: {
       taken_at: data.takenAt,
       updated_at: data.updatedAt,
       deleted_at: data.deletedAt ?? null,
+      ai_description: data.aiDescription ?? null,
     },
     { onConflict: 'client_id' }
   );

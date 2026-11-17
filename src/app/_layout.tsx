@@ -1,3 +1,4 @@
+import '../polyfills';
 // src/app/_layout.tsx
 // Layout raíz con SQLite Migrations (Semana 7) y Supabase Auth Guard (Semana 8)
 // REGLA 5: Renderizado condicional declarativo para el estado de autenticación (NO router.replace)

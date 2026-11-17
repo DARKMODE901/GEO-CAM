@@ -29,6 +29,7 @@ export interface GeoPhoto {
   syncedAt?: number | null;
   ownerId?: string | null;
   deletedAt?: number | null;
+  aiDescription?: string | null;
   syncStatus: SyncStatus;
 }
 
@@ -54,6 +55,7 @@ export interface RemotePhoto {
   created_at: string;
   server_updated_at: string;
   deleted_at: string | null;
+  ai_description?: string | null;
 }
 
 export interface RemotePhotoFeedItem extends RemotePhoto {

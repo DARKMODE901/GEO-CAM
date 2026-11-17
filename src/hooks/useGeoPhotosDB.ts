@@ -147,6 +147,17 @@ export function useGeoPhotosDB(ownerId?: string | null) {
   );
 
   /**
+   * Actualiza la descripción generada por IA en SQLite (T4), actualiza updatedAt e invalida ['sync'].
+   */
+  const setDescription = useCallback(
+    async (id: number, description: string): Promise<void> => {
+      await photoRepository.setDescription(id, description);
+      triggerBackgroundSync();
+    },
+    [triggerBackgroundSync]
+  );
+
+  /**
    * Alterna favorita en SQLite, actualiza updatedAt e invalida ['sync'].
    */
   const toggleFavorite = useCallback(
@@ -240,6 +251,7 @@ export function useGeoPhotosDB(ownerId?: string | null) {
     removePhoto,
     clearAll,
     updateNotes,
+    setDescription,
     toggleFavorite,
     setAlbum,
     syncPhoto,

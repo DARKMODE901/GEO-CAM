@@ -1,7 +1,17 @@
 // src/db/schema.ts
 import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
-import * as Crypto from 'expo-crypto';
+
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 /**
  * Tabla de Álbumes
@@ -19,7 +29,7 @@ export const albums = sqliteTable('albums', {
  */
 export const photos = sqliteTable('photos', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  clientId: text('client_id').notNull().$defaultFn(() => Crypto.randomUUID()),
+  clientId: text('client_id').notNull().$defaultFn(() => generateUUID()),
   uri: text('uri').notNull(), // Ruta física permanente en FileSystem.documentDirectory
   latitude: real('latitude'),
   longitude: real('longitude'),
@@ -37,6 +47,8 @@ export const photos = sqliteTable('photos', {
   ownerId: text('owner_id'),
   // Borrado lógico sincronizado (Migración 4 - Sync Bidireccional)
   deletedAt: integer('deleted_at'),
+  // Descripción generada por IA (Semana 10 - T3)
+  aiDescription: text('ai_description'),
 });
 
 /**
@@ -45,6 +57,17 @@ export const photos = sqliteTable('photos', {
 export const syncMeta = sqliteTable('sync_meta', {
   key: text('key').primaryKey(),
   value: text('value').notNull(),
+});
+
+/**
+ * Tabla de Mensajes del Chat con el Tutor IA (Persistencia SQLite - Semana 10 C1)
+ */
+export const chatMessages = sqliteTable('chat_messages', {
+  id: text('id').primaryKey(),
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  parts: text('parts'), // Serialización JSON de los parts de UIMessage
+  createdAt: integer('created_at').notNull(),
 });
 
 /**
@@ -69,4 +92,7 @@ export type NewPhoto = typeof photos.$inferInsert;
 
 export type SyncMeta = typeof syncMeta.$inferSelect;
 export type NewSyncMeta = typeof syncMeta.$inferInsert;
+
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type NewChatMessage = typeof chatMessages.$inferInsert;
 

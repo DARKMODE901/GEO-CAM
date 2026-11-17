@@ -169,6 +169,7 @@ export const photoRepository = {
     remotePath: string;
     ownerId: string;
     deletedAtMs?: number | null;
+    aiDescription?: string | null;
   }): Promise<Photo> {
     const [created] = await db
       .insert(photos)
@@ -189,6 +190,7 @@ export const photoRepository = {
         remotePath: data.remotePath,
         ownerId: data.ownerId,
         deletedAt: data.deletedAtMs ?? null,
+        aiDescription: data.aiDescription ?? null,
       })
       .returning();
     return created;
@@ -210,6 +212,7 @@ export const photoRepository = {
       ownerId: string;
       remoteUpdatedAtMs: number;
       deletedAtMs: number | null;
+      aiDescription?: string | null;
     }
   ): Promise<void> {
     await db
@@ -225,7 +228,19 @@ export const photoRepository = {
         updatedAt: data.remoteUpdatedAtMs,
         syncedAt: data.remoteUpdatedAtMs,
         deletedAt: data.deletedAtMs,
+        ...(data.aiDescription !== undefined ? { aiDescription: data.aiDescription } : {}),
       })
+      .where(eq(photos.id, id));
+  },
+
+  /**
+   * Actualiza la descripción generada por IA y actualiza obligatoriamente updatedAt (T4).
+   * La foto queda inmediatamente marcada como pendiente de sincronizar.
+   */
+  async setDescription(id: number, aiDescription: string): Promise<void> {
+    await db
+      .update(photos)
+      .set({ aiDescription, updatedAt: Date.now() })
       .where(eq(photos.id, id));
   },
 

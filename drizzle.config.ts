@@ -1,3 +1,7 @@
+if (typeof (globalThis as any).__DEV__ === 'undefined') {
+  (globalThis as any).__DEV__ = false;
+}
+
 import { defineConfig } from 'drizzle-kit';
 
 export default defineConfig({

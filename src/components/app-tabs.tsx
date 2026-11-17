@@ -12,15 +12,6 @@ export default function AppTabs() {
       backgroundColor={colors.background}
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}>
-      {/* Pantalla principal */}
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
       {/* Cámara geolocalizada */}
       <NativeTabs.Trigger name="geocam">
         <NativeTabs.Trigger.Label>Cámara</NativeTabs.Trigger.Label>
@@ -53,6 +44,15 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Nube</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/cloud.png')}
+          renderingMode="template"
+        />
+      </NativeTabs.Trigger>
+
+      {/* Tutor IA (Semana 10) */}
+      <NativeTabs.Trigger name="tutor">
+        <NativeTabs.Trigger.Label>Tutor IA</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
         />
       </NativeTabs.Trigger>

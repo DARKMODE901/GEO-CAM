@@ -94,6 +94,7 @@ async function pullRemoteChanges(
               remotePath: remote.storage_path,
               ownerId: remote.user_id,
               deletedAtMs: null,
+              aiDescription: remote.ai_description,
             });
             pulled++;
           }
@@ -109,6 +110,7 @@ async function pullRemoteChanges(
               ownerId: remote.user_id,
               remoteUpdatedAtMs,
               deletedAtMs: remoteDeletedAtMs,
+              aiDescription: remote.ai_description,
             });
             await deletePhysicalPhoto(local.uri);
             pulled++;
@@ -130,6 +132,7 @@ async function pullRemoteChanges(
               ownerId: remote.user_id,
               remoteUpdatedAtMs,
               deletedAtMs: null,
+              aiDescription: remote.ai_description,
             });
             pulled++;
           }
@@ -193,6 +196,7 @@ async function pushSinglePhotoRecord(
         takenAt: takenAtIso,
         updatedAt: updatedAtIso,
         deletedAt: deletedAtIso,
+        aiDescription: photo.aiDescription,
       });
 
       // 2. Confirmar sincronización con el updatedAt exacto subido
@@ -236,6 +240,7 @@ async function pushSinglePhotoRecord(
     takenAt: takenAtIso,
     updatedAt: updatedAtIso,
     deletedAt: null,
+    aiDescription: photo.aiDescription,
   });
 
   // Jamás usar Date.now() — usar exactamente el targetUpdatedAt recién subido

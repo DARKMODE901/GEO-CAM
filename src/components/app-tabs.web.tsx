@@ -22,9 +22,6 @@ export default function AppTabs() {
       <TabSlot style={{ height: '100%' }} />
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
-          </TabTrigger>
           <TabTrigger name="geocam" href="/geocam" asChild>
             <TabButton>📷 Cámara</TabButton>
           </TabTrigger>
@@ -36,6 +33,9 @@ export default function AppTabs() {
           </TabTrigger>
           <TabTrigger name="nube" href={"/nube" as any} asChild>
             <TabButton>☁️ Nube</TabButton>
+          </TabTrigger>
+          <TabTrigger name="tutor" href={"/tutor" as any} asChild>
+            <TabButton>🤖 Tutor IA</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>

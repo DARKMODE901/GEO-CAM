@@ -12,3 +12,12 @@ declare module '@/drizzle/migrations' {
   export default migrations;
 }
 
+declare module '@ungap/structured-clone' {
+  export default function structuredClone<T>(value: T): T;
+}
+
+declare module '@stardazed/streams-text-encoding' {
+  export class TextEncoderStream {}
+  export class TextDecoderStream {}
+}
+

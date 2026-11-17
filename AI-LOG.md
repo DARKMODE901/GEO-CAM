@@ -218,5 +218,74 @@
 4. **Uso estricto de v5 y paginación segura:** Se verificó mediante auditoría estática la ausencia de `cacheTime`, `status === 'loading'`, `.range()` y comandos SQL `DELETE` directos sobre fotos en todo `src/`.
 5. **Fuga de capas en pantallas (`src/app/`) y error RLS por cambio de cuenta:** Se detectó que `nube.tsx`, `explore.tsx` y `_layout.tsx` importaban símbolos de `supabase`, `cloudPhotos`, `photoRepository` o `@/db/schema`; además, una fila heredada sin `owner_id` de otra cuenta podía quedar mezclada y fallar en RLS durante un `Push` tras cambiar de usuario. Se aisló la capa de UI de Supabase/Drizzle y se fortaleció `photoRepository.ensureSyncFields()` para inferir y completar el `owner_id` desde el prefijo UUID de `remote_path` cuando falta.
 
+---
+
+# Registro de Auditoría de IA – Semana 10 (Tag v2.0.0)
+
+**Estudiante(s):** Leonardo Carrillo Caballero  
+**Semana:** 10  
+**Proyecto:** GeoCam IA Multimodal – Asistente Tutor en Streaming, Visión Artificial "GeoCam Ve" y Retos de Producto C1 a C6
+
+---
+
+## 1. Prompts Utilizados
+
+- *"Implementa la arquitectura de proxy seguro para consumir Google Gemini en GeoCam: la app móvil React Native / Expo nunca almacena claves AIza ni consume la API de Google de forma directa; delega la autenticación a Supabase Edge Functions protegidas con `withSupabase({ auth: 'user' })`."*
+- *"Configura Vercel AI SDK v7 en el backend y frontend: streaming con `streamText` + `toUIMessageStream`, transporte con `DefaultChatTransport` y `expo/fetch`, polyfills de Hermes para `structuredClone` y TextStreams, y soporte multimodal con reducción previa de imágenes a menos de 300 KB."*
+- *"Implementa el taller 'GeoCam Ve': Edge Function `describir-foto` sin streaming usando `generateText`, servicio `services/vision.ts`, migración SQLite con campo `ai_description` vía Drizzle, repositorio `setDescription` con actualización de `updatedAt` para sincronización bidireccional y UI de detalle con botón 'Describir con IA', spinner, aviso de privacidad y campo de texto editable."*
+- *"Implementa los 6 Retos de Producto C1 a C6: Historial de chat persistente en SQLite (C1), perfil de usuario dinámico validado con Zod (.catch) en backend (C2), generación de tarjetas de repaso estructuradas usando `generateText` + `output: Output.object({ schema })` (C3), manejo integral de estados de red y errores 401/429/offline con auto sign out (C4), control estricto de límite diario en Supabase con tabla `uso_ia` y RLS (C5), y verificación total de seguridad sin claves AIza en el bundle ni repositorio (C6)."*
+
+---
+
+## 2. Código Generado vs. Código Modificado
+
+### Arquitectura de Proxy Seguro (`supabase/functions/tutor`, `supabase/functions/describir-foto`, `supabase/functions/tarjetas-repaso`)
+- **¿Qué generó la IA?:** Tres Edge Functions en Deno utilizando los paquetes de npm `npm:@supabase/server@1`, `npm:@ai-sdk/google@4`, `npm:ai@7` y `npm:zod@3`. Todas las funciones están protegidas mediante el wrapper `withSupabase({ auth: 'user' })` que extrae y valida el JWT del usuario autenticado, devolviendo HTTP 401 de forma nativa ante tokens inválidos o expirados.
+- **¿Qué modifiqué/corregí?:**
+  - Implementé el control de límite diario por usuario (C5) en cada función: antes de invocar a Gemini, se consulta la tabla `uso_ia` con el cliente de Supabase contextual (`ctx.supabase`), cumpliendo estrictamente con las políticas de Row Level Security (RLS). Si el usuario supera el límite configurado (`LIMITE_DIARIO`), la función aborta de inmediato con HTTP 429 (`Vuelve mañana`) sin gastar cuota de Gemini. Si no lo supera, registra la consulta en `uso_ia`.
+  - En la función `tutor`, desempaqueté en `onError` los errores `RetryError.isInstance(error) ? error.lastError : error` y transformé los errores de cuota `APICallError 429` en mensajes comprensibles y amigables en español.
+
+### Polyfills Hermes y Transporte Streaming (`polyfills.ts`, `lib/chatTransport.ts`, `lib/foto.ts`)
+- **¿Qué generó la IA?:** Polyfills para el motor Hermes (`structuredClone` vía `@ungap/structured-clone`, `TextEncoderStream` y `TextDecoderStream` vía `@stardazed/streams-text-encoding`) importados en la primera línea absoluta de `src/app/_layout.tsx`. Función `crearTransporte` usando `DefaultChatTransport` con `fetch as expoFetch` de `expo/fetch` y cabeceras asíncronas con token de Supabase.
+- **¿Qué modifiqué/corregí?:**
+  - Añadí el payload dinámico de perfil (C2) dentro de la propiedad `body: async () => ({ perfil: await getUserProfile() })` en `crearTransporte` para enviar automáticamente la configuración pedagógica del usuario en cada llamada de chat.
+  - En `lib/foto.ts`, implementé compresión doble: primero intenta usar la API orientada a objetos de Expo SDK (`ImageManipulator.manipulate(uri).resize({ width: 1024 }).renderAsync().saveAsync(...)`) y añade un fallback automático con `manipulateAsync`, garantizando imágenes JPEG al 70% de calidad con peso ~150 KB (&lt; 300 KB).
+
+### Persistencia de Chat en SQLite (C1) y Salida Estructurada (C3)
+- **¿Qué generó la IA?:** Tabla SQLite `chat_messages` en `schema.ts`, repositorio `chatRepository.ts` con soporte `upsert` por `id`, serialización de `parts` JSON, botón "Nueva conversación", y función `generarTarjetasDeRepaso` que consume la salida tipada de `tarjetas-repaso`.
+- **¿Qué modifiqué/corregí?:**
+  - Adapté `useChat` para cargar el historial inicial asíncrono desde SQLite antes de renderizar la vista de chat, sincronizando las mutaciones con `onFinish: async ({ messages }) => chatRepository.upsertMany(messages)`.
+  - Diseñé un visor interactivo de flashcards en modal con tarjetas volteables (pregunta visible y respuesta oculta hasta que el usuario toca la tarjeta para revelarla).
+
+### Visión Artificial "GeoCam Ve" (Taller T1 a T6)
+- **¿Qué generó la IA?:** Servicio `services/vision.ts`, migración SQLite `0004_minor_colossus.sql` con `ALTER TABLE photos ADD ai_description text;`, mapeo en `photoRepository.ts` (`setDescription`), subida/bajada sincronizada en `syncService.ts` y componente interactivo en `mapa.tsx`.
+- **¿Qué modifiqué/corregí?:**
+  - En `mapa.tsx`, incorporé en la tarjeta `PhotoCard` el botón "Describir con IA (Gemini)" y el bloque visual de descripción IA. Al abrir el modal de detalle, se incluye el spinner mientras procesa, la advertencia de privacidad requerida ("La foto se envía a Google Gemini"), la desactivación con aviso si no hay red, y el `TextInput` editable que permite al usuario ajustar la descripción sugerida antes o después de presionar "Guardar Cambios".
+
+---
+
+## 3. Errores Críticos de IA Detectados y Corregidos (Auditoría)
+
+1. **Intento de uso de `EXPO_PUBLIC_GEMINI_API_KEY` en el cliente móvil:**
+   - *Error Detectado:* Inicialmente, modelos de lenguaje antiguos sugerían colocar `EXPO_PUBLIC_GEMINI_API_KEY=AIzaSy...` en el archivo `.env` del proyecto Expo y llamar directamente a `@google/genai` desde React Native.
+   - *Corrección Aplicada:* Se rechazó terminantemente este patrón inseguro, ya que cualquier variable prefijada con `EXPO_PUBLIC_` se incrusta en texto plano en el archivo APK/bundle final, exponiendo la cuota y facturación del desarrollador. Se implementó la arquitectura Proxy: la app móvil solo almacena claves públicas de Supabase (`EXPO_PUBLIC_SUPABASE_URL` y `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`); la autenticación se delega a las Supabase Edge Functions mediante el token de sesión del usuario, y es la Edge Function la única que lee el secreto `GEMINI_API_KEY`. Se auditó todo el repositorio verificando que `AIza` no figure en ningún archivo.
+
+2. **Uso de la propiedad obsoleta `system:` en lugar de `instructions:` (Vercel AI SDK v7):**
+   - *Error Detectado:* La IA generó código para las Edge Functions con `streamText({ model, system: 'Eres un tutor...' })`, basándose en especificaciones deprecadas de AI SDK v4/v5.
+   - *Corrección Aplicada:* En Vercel AI SDK v7 (`npm:ai@7`), la propiedad `system` fue eliminada en favor de `instructions`. Se corrigieron todas las funciones del backend (`tutor`, `describir-foto` y `tarjetas-repaso`) usando estrictamente `instructions: ...`.
+
+3. **Invocación de `generateObject` (retirado en Vercel AI SDK v7):**
+   - *Error Detectado:* Para el reto C3 (Tarjetas de Repaso estructuradas), la IA intentó importar y llamar a `generateObject({ model, schema: ... })`.
+   - *Corrección Aplicada:* En AI SDK v7, `generateObject` quedó formalmente obsoleto y retirado. Se refactorizó la función `tarjetas-repaso` para utilizar `generateText` en combinación con la propiedad `output: Output.object({ schema: TarjetasSchema })` validada con Zod, obteniendo salida tipada en JSON válida y segura.
+
+4. **Intento de uso de modelos Gemini 2.5 retirados:**
+   - *Error Detectado:* La IA propuso usar `gemini-2.5-flash` como modelo por defecto.
+   - *Corrección Aplicada:* Los modelos 2.5 fueron retirados. Se configuró por defecto `gemini-3.8-flash` con opción de respaldo a `gemini-3.5-flash-lite`.
+
+5. **Límite de pestañas en `BottomNavigationView` de Android (Prevención de Crash):**
+   - *Error Detectado:* Al agregar la pestaña del Tutor IA a `NativeTabs` en `app-tabs.tsx`, el número total de pestañas subió a 6 (`index`, `geocam`, `mapa`, `explore`, `nube`, `tutor`). En Android, el componente nativo `BottomNavigationView` lanza una excepción fatal si se configuran más de 5 pestañas.
+   - *Corrección Aplicada:* Se eliminó el trigger redundante de `index` (que solo redirige a `geocam`), dejando exactamente las 5 pestañas operativas: Cámara, Mapa, Álbumes, Nube y Tutor IA.
+
+
 
 

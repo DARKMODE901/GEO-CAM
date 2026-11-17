@@ -18,6 +18,7 @@ import { useGeoPhotos } from '@/context/GeoPhotosContext';
 import { useAuth } from '@/context/AuthContext';
 import { useNetworkOnline } from '@/hooks/useNetworkOnline';
 import { SyncMonitorModal } from '@/components/SyncMonitorModal';
+import { describirFotoConIA } from '@/services/vision';
 import type { GeoPhoto } from '@/types/geo';
 
 function getStaticMapUrl(lat: number, lng: number): string {
@@ -41,6 +42,7 @@ export default function MapaScreen() {
     removePhoto,
     clearAll,
     updateNotes,
+    setDescription,
     toggleFavorite,
     setAlbum,
     createAlbum,
@@ -49,9 +51,11 @@ export default function MapaScreen() {
     monitorState,
   } = useGeoPhotos();
 
-  // Estados para modales de notas, asignación de álbum, creación de álbum y monitor
-  const [selectedPhotoForNote, setSelectedPhotoForNote] = useState<GeoPhoto | null>(null);
+  // Estados para modales de detalle/notas/visión IA (T6), álbum y monitor
+  const [selectedPhotoForDetail, setSelectedPhotoForDetail] = useState<GeoPhoto | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [aiDescriptionText, setAiDescriptionText] = useState('');
+  const [isDescribing, setIsDescribing] = useState(false);
 
   const [selectedPhotoForAlbum, setSelectedPhotoForAlbum] = useState<GeoPhoto | null>(null);
 
@@ -65,15 +69,46 @@ export default function MapaScreen() {
   const [isBatchSyncing, setIsBatchSyncing] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
 
-  const handleOpenNoteModal = (photo: GeoPhoto) => {
-    setSelectedPhotoForNote(photo);
+  const handleOpenDetailModal = (photo: GeoPhoto) => {
+    setSelectedPhotoForDetail(photo);
     setNoteText(photo.notes ?? '');
+    setAiDescriptionText(photo.aiDescription ?? '');
   };
 
-  const handleSaveNote = async () => {
-    if (selectedPhotoForNote) {
-      await updateNotes(selectedPhotoForNote.id, noteText.trim());
-      setSelectedPhotoForNote(null);
+  const handleDescribePhoto = async () => {
+    if (!selectedPhotoForDetail) return;
+    if (!isOnline) {
+      Alert.alert(
+        'Modo Offline',
+        'Se requiere conexión a internet para describir fotos con Gemini en Supabase.'
+      );
+      return;
+    }
+
+    setIsDescribing(true);
+    try {
+      const descripcion = await describirFotoConIA(selectedPhotoForDetail.uri);
+      setAiDescriptionText(descripcion);
+    } catch (err: any) {
+      Alert.alert('Error de Visión IA', err?.message || 'No se pudo generar la descripción.');
+    } finally {
+      setIsDescribing(false);
+    }
+  };
+
+  const handleSaveDetail = async () => {
+    if (selectedPhotoForDetail) {
+      const trimmedNote = noteText.trim();
+      const trimmedAiDesc = aiDescriptionText.trim();
+
+      if (trimmedNote !== (selectedPhotoForDetail.notes ?? '')) {
+        await updateNotes(selectedPhotoForDetail.id, trimmedNote);
+      }
+      if (trimmedAiDesc !== (selectedPhotoForDetail.aiDescription ?? '')) {
+        await setDescription(selectedPhotoForDetail.id, trimmedAiDesc);
+      }
+
+      setSelectedPhotoForDetail(null);
     }
   };
 
@@ -303,7 +338,7 @@ export default function MapaScreen() {
                 albumName={albumName}
                 onDelete={removePhoto}
                 onToggleFavorite={toggleFavorite}
-                onOpenNote={handleOpenNoteModal}
+                onOpenDetail={handleOpenDetailModal}
                 onOpenAlbumSelect={(photo) => setSelectedPhotoForAlbum(photo)}
                 onSync={handleSyncSingle}
                 isSyncing={syncingPhotoId === item.id}
@@ -313,31 +348,94 @@ export default function MapaScreen() {
         />
       )}
 
-      {/* Modal para Editar Notas (Migración 2) */}
-      <Modal visible={Boolean(selectedPhotoForNote)} transparent animationType="fade">
+      {/* Modal para Detalle de Foto, Visión IA y Notas (Semana 10 - T6) */}
+      <Modal visible={Boolean(selectedPhotoForDetail)} transparent animationType="fade">
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>📝 Notas de la Foto</Text>
-            <Text style={styles.modalSubtitle}>Agrega detalles o comentarios a esta captura</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Escribe una nota aquí..."
-              placeholderTextColor="#888"
-              multiline
-              numberOfLines={4}
-              value={noteText}
-              onChangeText={setNoteText}
-            />
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={[styles.modalBtn, styles.modalCancelBtn]}
-                onPress={() => setSelectedPhotoForNote(null)}>
-                <Text style={styles.modalCancelText}>Cancelar</Text>
-              </Pressable>
-              <Pressable style={[styles.modalBtn, styles.modalSaveBtn]} onPress={handleSaveNote}>
-                <Text style={styles.modalSaveText}>Guardar Nota</Text>
-              </Pressable>
-            </View>
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.modalScroll}>
+              <Text style={styles.modalTitle}>📷 Detalle y Visión IA</Text>
+
+              {selectedPhotoForDetail && (
+                <Image
+                  source={{ uri: selectedPhotoForDetail.uri }}
+                  style={styles.modalPhotoPreview}
+                  resizeMode="cover"
+                />
+              )}
+
+              {/* Sección IA (T6) */}
+              <View style={styles.aiSection}>
+                <View style={styles.aiHeaderRow}>
+                  <Text style={styles.aiSectionTitle}>✨ Descripción con IA</Text>
+                  <Pressable
+                    style={[
+                      styles.aiActionBtn,
+                      (!isOnline || isDescribing) && styles.aiActionBtnDisabled,
+                    ]}
+                    onPress={handleDescribePhoto}
+                    disabled={!isOnline || isDescribing}>
+                    {isDescribing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.aiActionBtnText}>
+                        {aiDescriptionText ? '🔄 Regenerar' : '✨ Describir'}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
+
+                {!isOnline && (
+                  <Text style={styles.offlineNotice}>
+                    ⚠️ Deshabilitado sin conexión a internet
+                  </Text>
+                )}
+
+                <Text style={styles.privacyNotice}>
+                  🔒 La foto se envía a Google Gemini
+                </Text>
+
+                <TextInput
+                  style={styles.textInput}
+                  placeholder={
+                    isDescribing
+                      ? 'Analizando con Gemini...'
+                      : 'La sugerencia generada aparecerá aquí para que la edites...'
+                  }
+                  placeholderTextColor="#888"
+                  multiline
+                  numberOfLines={3}
+                  value={aiDescriptionText}
+                  onChangeText={setAiDescriptionText}
+                />
+              </View>
+
+              {/* Sección Notas */}
+              <View style={styles.notesSection}>
+                <Text style={styles.modalSubtitle}>📝 Notas Personales</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Escribe detalles o comentarios..."
+                  placeholderTextColor="#888"
+                  multiline
+                  numberOfLines={3}
+                  value={noteText}
+                  onChangeText={setNoteText}
+                />
+              </View>
+
+              <View style={styles.modalButtons}>
+                <Pressable
+                  style={[styles.modalBtn, styles.modalCancelBtn]}
+                  onPress={() => setSelectedPhotoForDetail(null)}>
+                  <Text style={styles.modalCancelText}>Cancelar</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.modalBtn, styles.modalSaveBtn]}
+                  onPress={handleSaveDetail}>
+                  <Text style={styles.modalSaveText}>Guardar Cambios</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -413,7 +511,7 @@ function PhotoCard({
   albumName,
   onDelete,
   onToggleFavorite,
-  onOpenNote,
+  onOpenDetail,
   onOpenAlbumSelect,
   onSync,
   isSyncing,
@@ -422,7 +520,7 @@ function PhotoCard({
   albumName?: string;
   onDelete: (id: number) => void;
   onToggleFavorite: (id: number, current: boolean) => void;
-  onOpenNote: (photo: GeoPhoto) => void;
+  onOpenDetail: (photo: GeoPhoto) => void;
   onOpenAlbumSelect: (photo: GeoPhoto) => void;
   onSync: (id: number) => void;
   isSyncing: boolean;
@@ -553,12 +651,25 @@ function PhotoCard({
           <Text style={styles.dateText}>{new Date(item.createdAt).toLocaleDateString()}</Text>
         </View>
 
+        {/* Descripción con IA (Google Gemini - T6) */}
+        {item.aiDescription ? (
+          <Pressable style={styles.aiBox} onPress={() => onOpenDetail(item)}>
+            <Text style={styles.aiTitle}>✨ Visión IA (Gemini):</Text>
+            <Text style={styles.aiText} numberOfLines={3}>{item.aiDescription}</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.aiDescribeBtn} onPress={() => onOpenDetail(item)}>
+            <Text style={styles.aiDescribeBtnText}>✨ Describir con IA (Gemini)</Text>
+          </Pressable>
+        )}
+
+        {/* Notas personales */}
         {item.notes ? (
-          <Pressable style={styles.noteBox} onPress={() => onOpenNote(item)}>
+          <Pressable style={styles.noteBox} onPress={() => onOpenDetail(item)}>
             <Text style={styles.noteContent}>📝 {item.notes}</Text>
           </Pressable>
         ) : (
-          <Pressable style={styles.addNoteBtn} onPress={() => onOpenNote(item)}>
+          <Pressable style={styles.addNoteBtn} onPress={() => onOpenDetail(item)}>
             <Text style={styles.addNoteBtnText}>+ Agregar nota</Text>
           </Pressable>
         )}
@@ -817,4 +928,52 @@ const styles = StyleSheet.create({
     borderBottomColor: '#333',
   },
   albumOptionText: { color: '#eee', fontSize: 15 },
+  // Estilos de Visión IA (T6)
+  modalScroll: { gap: 12 },
+  modalPhotoPreview: { width: '100%', height: 160, borderRadius: 10, marginVertical: 4 },
+  aiSection: {
+    backgroundColor: '#1a2332',
+    borderWidth: 1,
+    borderColor: '#0a7ea4',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  aiHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  aiSectionTitle: { color: '#38bdf8', fontSize: 14, fontWeight: '700' },
+  aiActionBtn: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  aiActionBtnDisabled: { opacity: 0.4 },
+  aiActionBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  offlineNotice: { color: '#f59e0b', fontSize: 11, fontWeight: '600' },
+  privacyNotice: { color: '#94a3b8', fontSize: 11, fontStyle: 'italic' },
+  notesSection: { gap: 6, marginTop: 4 },
+  aiBox: {
+    backgroundColor: '#0c2238',
+    borderColor: '#0284c7',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+  },
+  aiTitle: { color: '#38bdf8', fontSize: 11, fontWeight: '700' },
+  aiText: { color: '#e0f2fe', fontSize: 13, lineHeight: 18 },
+  aiDescribeBtn: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#38bdf8',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  aiDescribeBtnText: { color: '#38bdf8', fontSize: 12, fontWeight: '600' },
 });

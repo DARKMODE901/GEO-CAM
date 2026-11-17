@@ -48,3 +48,6 @@ example
 *.db-journal
 *.db-shm
 *.db-wal
+
+# Supabase CLI temporary files
+supabase/.temp/
