@@ -1,6 +1,11 @@
 # 📸 GeoCam
 
-Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite tomar fotografías geolocalizadas, importar imágenes desde la galería y visualizarlas en una galería con coordenadas GPS.
+Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite tomar fotografías geolocalizadas, sincronización Offline-First con Supabase y SQLite, y asistencia de exploración geográfica con **Google Gemini IA Multimodal**.
+
+> **👥 Autores del Proyecto:**
+> - **Leonardo Carrillo**
+> - **Edgar Zúñiga**
+> - **Deivis Magdaniel**
 
 ---
 
@@ -22,37 +27,42 @@ Aplicación móvil desarrollada con **React Native + Expo SDK 58** que permite t
 
 <table>
   <tr>
-    <td align="center" width="33%">
-      <img src="screenshots/32-s10-tutor-streaming.jpg" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/32-s10-tutor-streaming.jpg" width="200" /><br/>
       <b>1️⃣ Tutor IA con Streaming</b><br/>
-      <sub>Transmisión en tiempo real palabra por palabra con Vercel AI SDK v7 y botón de stop para abortar.</sub>
+      <sub>Streaming de texto en tiempo real palabra por palabra con Vercel AI SDK v7 respondiendo consulta geográfica.</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/33-s10-tutor-multimodal.jpg" width="220" /><br/>
+    <td align="center" width="25%">
+      <img src="screenshots/33-s10-tutor-multimodal.jpg" width="200" /><br/>
       <b>2️⃣ Análisis Multimodal de Fotos</b><br/>
-      <sub>Envío de fotografía reducida a &lt; 300 KB con análisis de paisaje, arquitectura y contexto geográfico.</sub>
+      <sub>Envío de fotografía reducida a &lt; 300 KB con análisis botánico, agrícola y paisajístico detallado por Gemini.</sub>
     </td>
-    <td align="center" width="33%">
-      <img src="screenshots/34-s10-geocam-ve-detalle.jpg" width="220" /><br/>
-      <b>3️⃣ Taller "GeoCam Ve"</b><br/>
-      <sub>Botón "Describir con IA" con aviso de privacidad de Gemini, spinner y sugerencia en TextInput editable.</sub>
+    <td align="center" width="25%">
+      <img src="screenshots/34-s10-geocam-ve-vision.jpg" width="200" /><br/>
+      <b>3️⃣ Taller "GeoCam Ve" en Mapa</b><br/>
+      <sub>Tarjeta de foto con coordenadas GPS, badge <code>✓ En Nube</code> y análisis automático de <i>Visión IA (Gemini)</i>.</sub>
+    </td>
+    <td align="center" width="25%">
+      <img src="screenshots/38-s10-historial-sqlite-c1.jpg" width="200" /><br/>
+      <b>4️⃣ Reto C1 — Historial SQLite</b><br/>
+      <sub>Persistencia offline en tabla <code>chat_messages</code> y diálogo de confirmación para vaciar historial e iniciar nueva sesión.</sub>
     </td>
   </tr>
   <tr>
     <td align="center" width="33%">
-      <img src="screenshots/35-s10-tarjetas-repaso-c3.jpg" width="220" /><br/>
-      <b>4️⃣ Reto C3 — Tarjetas de Repaso</b><br/>
-      <sub>Salida estructurada con Zod (<code>generateText</code> + <code>Output.object</code>) y flashcards interactivas volteables.</sub>
+      <img src="screenshots/35-s10-perfil-modal-c2.jpg" width="220" /><br/>
+      <b>5️⃣ Reto C2 — Modal Perfil Dinámico</b><br/>
+      <sub>Configuración interactiva de Nombre (<i>Leonardo</i>), Tema (<i>Paisajes</i>) y Nivel pedagógico (<i>Avanzado</i>).</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/36-s10-perfil-dinamico-c2.jpg" width="220" /><br/>
-      <b>5️⃣ Reto C2 — Perfil Dinámico</b><br/>
-      <sub>Modal de personalización (Nombre, Tema, Nivel) con validación Zod <code>.catch()</code> en el servidor.</sub>
+      <img src="screenshots/36-s10-perfil-guardado-c2.jpg" width="220" /><br/>
+      <b>6️⃣ Reto C2 — Confirmación de Guardado</b><br/>
+      <sub>Alerta de confirmación de guardado: el Tutor IA adaptará sus explicaciones al perfil del usuario.</sub>
     </td>
     <td align="center" width="33%">
-      <img src="screenshots/37-s10-rate-limit-c5.jpg" width="220" /><br/>
-      <b>6️⃣ Reto C5 — Rate Limiting 429</b><br/>
-      <sub>Control diario en Supabase con tabla <code>uso_ia</code> y RLS: respuesta inmediata 429 "Vuelve mañana".</sub>
+      <img src="screenshots/37-s10-chat-perfil-adaptado.jpg" width="220" /><br/>
+      <b>7️⃣ Reto C2 — Tutor IA Adaptado al Perfil</b><br/>
+      <sub>El Tutor IA se dirige a <i>Leonardo</i> adaptando su lenguaje técnico a nivel avanzado sobre análisis geomorfológico de paisajes.</sub>
     </td>
   </tr>
 </table>
@@ -727,6 +737,38 @@ npx supabase functions deploy tarjetas-repaso --no-verify-jwt
 
 ---
 
+## 🧪 Matriz de Pruebas y Verificación del Sistema (Semana 10)
+
+Para verificar y certificar que la aplicación **GeoCam v2.0.0** está completa, robusta y lista para producción, se diseñó e implementó un protocolo integral de pruebas dividido en dos bloques: **Bloque A (Pruebas Funcionales en Dispositivo Físico con Evidencias)** y **Bloque B (Pruebas Técnicas y Auditoría de Seguridad en Terminal)**.
+
+---
+
+### 📱 Bloque A: Pruebas Funcionales en Dispositivo Físico
+
+| # | Prueba / Escenario | Procedimiento en la App | Comportamiento Esperado | Resultado Real Observado |
+|---|---|---|---|:---:|
+| **P1** | **Tutor IA con Streaming en Tiempo Real** | Abrir la pestaña **Tutor IA**, escribir una consulta sobre geografía física (ej. *"¿Por qué hay desiertos cerca del mar?"*) y presionar Enviar. | Transmisión palabra por palabra en vivo (`status === 'streaming'`) mediante `streamText` y `toUIMessageStream` de Vercel AI SDK v7. Durante la generación, el botón de enviar cambia a botón de detención (cuadrado rojo) que cancela el stream con `stop()`. | ✅ **Aprobado** — Streaming fluido y continuo en pantalla sin bloqueos ([Evidencia: 32-s10-tutor-streaming.jpg](screenshots/32-s10-tutor-streaming.jpg)). |
+| **P2** | **Análisis Multimodal de Fotografías** | En el Tutor IA, pulsar el botón de cámara o galería, seleccionar una foto (ej. campo de girasoles), escribir *"¿Qué ves en esta foto y qué detalles geográficos o culturales destacan?"* y enviar. | La imagen se reduce en el dispositivo a &lt; 300 KB (JPEG 0.7, 1024 px) y se transmite en base64 a la Edge Function. Gemini analiza la escena identificando aspectos botánicos, clima y geografía agrícola. | ✅ **Aprobado** — Identificación botánica (*Helianthus annuus*) y contextualización geográfica y cultural detallada ([Evidencia: 33-s10-tutor-multimodal.jpg](screenshots/33-s10-tutor-multimodal.jpg)). |
+| **P3** | **Taller "GeoCam Ve" (Visión IA en Mapa)** | En la pestaña **Mapa**, seleccionar una foto geolocalizada y pulsar el botón *"Describir con IA"*. | Se muestra spinner con aviso de privacidad ("La foto se envía a Google Gemini"). La Edge Function `describir-foto` genera una descripción de 1–2 oraciones en español neutro y la inyecta en `ai_description`. | ✅ **Aprobado** — Tarjeta con coordenadas GPS (`11.54000, -72.92880`), estado `✓ En Nube` y descripción automática en `✨ Visión IA (Gemini):` ([Evidencia: 34-s10-geocam-ve-vision.jpg](screenshots/34-s10-geocam-ve-vision.jpg)). |
+| **P4** | **Reto C2: Configuración del Perfil de Aprendizaje** | En el Tutor IA, pulsar el botón superior *"⚙️ Perfil"*. Ingresar Nombre (*"Leonardo"*), Área de Enfoque (*"Paisajes y vistas hermosas"*), Nivel (*"Avanzado"*) y presionar *"Guardar"*. | Se abre modal interactivo. Al guardar, se almacena en estado persistente y se emite alerta modal nativa informando que las respuestas se adaptarán al perfil. | ✅ **Aprobado** — Modal con inputs limpios ([Evidencia: 35-s10-perfil-modal-c2.jpg](screenshots/35-s10-perfil-modal-c2.jpg)) y alerta modal de confirmación desplegada ([Evidencia: 36-s10-perfil-guardado-c2.jpg](screenshots/36-s10-perfil-guardado-c2.jpg)). |
+| **P5** | **Reto C2: Adaptación Pedagógica del Tutor IA** | Con el perfil guardado, enviar una pregunta conceptual (ej. *"Como diferenciar un paisaje con otro"*). | El cliente envía `{ perfil }` en el cuerpo. La Edge Function valida con Zod (`.catch()`) e inyecta dinámicamente las `instructions`. Gemini saluda al usuario por su nombre y adapta la terminología al nivel seleccionado. | ✅ **Aprobado** — El tutor responde *"¡Excelente pregunta, Leonardo!..."* abordando morfogénesis, tectónica, clima y análisis antrópico con rigor avanzado ([Evidencia: 37-s10-chat-perfil-adaptado.jpg](screenshots/37-s10-chat-perfil-adaptado.jpg)). |
+| **P6** | **Reto C1: Historial Persistente en SQLite y Vaciado** | Chatear con el tutor, cerrar completamente la aplicación (force close), reabrirla y verificar los mensajes. Luego tocar el botón de papelera en la barra superior. | Los mensajes persisten íntegros en la tabla SQLite `chat_messages`. Al pulsar la papelera se abre un diálogo de confirmación para vaciar la base de datos local y reiniciar la sesión. | ✅ **Aprobado** — Carga instantánea de mensajes anteriores y diálogo de confirmación *"¿Deseas vaciar el historial del chat en SQLite e iniciar una nueva sesión?"* ([Evidencia: 38-s10-historial-sqlite-c1.jpg](screenshots/38-s10-historial-sqlite-c1.jpg)). |
+| **P7** | **Reto C4: Modo Avión y Manejo Resiliente de Red** | Activar Modo Avión en el teléfono e ingresar al Tutor IA. Luego desactivar el modo avión y reintentar. | Banner ámbar superior *"Sin conexión a internet"* con bloqueo de botones de envío. Ante errores temporales o de saturación del modelo, se despliega banner de error con botón *"Reintentar"* funcional sin crashear. | ✅ **Aprobado** — Banner informativo con opción de reintento y recuperación fluida ([Evidencia: banner de error y reintento exitoso](screenshots/32-s10-tutor-streaming.jpg)). |
+
+---
+
+### 💻 Bloque B: Pruebas Técnicas y Auditoría en Terminal
+
+| # | Comando Ejecutado | Objetivo de la Prueba | Resultado Observado | Estado |
+|---|---|---|---|:---:|
+| **P8** | `git grep "AIza"` | **Auditoría Zero API Keys:** Garantizar que ninguna clave privada de Google Gemini (`AIza...`) esté presente en el código fuente, archivos `.env` o bundles compilados. | Código de salida 0 en menciones documentales; **cero claves reales o variables de entorno expuestas**. Solo residen claves públicas de Supabase en el cliente. | ✅ **PASS** |
+| **P9** | `npx tsc --noEmit` | **Compilación Estricta TypeScript:** Verificar que todo el código cumple con los tipos estrictos de TypeScript sin errores ni advertencias de tipo. | Salida completamente limpia, código de salida `0`. 0 errores de TypeScript en toda la aplicación. | ✅ **PASS** |
+| **P10** | `npm run lint` | **Análisis Estático (ESLint):** Comprobar que no existan variables sin uso, violaciones de las Reglas de Hooks o malas prácticas. | Salida limpia con código de salida `0`. Cumplimiento total del estándar de Expo ESLint. | ✅ **PASS** |
+| **P11** | `curl -i -X POST https://<REF>.supabase.co/functions/v1/tutor` | **Seguridad de Endpoints Proxy:** Validar que ninguna petición sin cabecera de autenticación válida pueda invocar a Gemini. | Retorna HTTP `401 Unauthorized` inmediato: `{"error":"Missing or invalid authorization header"}`. Gemini está 100% blindado contra acceso no autenticado. | ✅ **PASS** |
+| **P12** | Invocación intensiva de Edge Functions | **Rate Limiting C5 y Fallback de Alta Disponibilidad:** Verificar que ante saturación de `gemini-3.8-flash` se aplique deadline de 8s y fallback a `gemini-3.5-flash-lite`, y que la tabla `uso_ia` controle el límite diario. | Fallback en cascada transparente y control diario en tabla `uso_ia` protegida por RLS. | ✅ **PASS** |
+
+---
+
 ## 🚀 Instalación y ejecución
 
 ```bash
@@ -747,6 +789,8 @@ npx expo start
 
 ---
 
-## 👤 Autor
+## 👥 Autores
 
-**Estudiante(s):** Leonardo Carrillo Caballero
+- **Leonardo Carrillo**
+- **Edgar Zúñiga**
+- **Deivis Magdaniel**

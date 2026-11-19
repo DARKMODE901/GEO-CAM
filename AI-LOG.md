@@ -1,6 +1,6 @@
 # Registro de Auditoría de IA (AI-LOG)
 
-**Estudiante(s):** Leonardo Carrillo Caballero
+**Estudiante(s) / Autores:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel
 **Semana:** 6  
 **Proyecto:** GeoCam – Taller Integrador 2
 
@@ -58,7 +58,7 @@
 
 # Registro de Auditoría de IA – Semana 7
 
-**Estudiante(s):** Leonardo Carrillo Caballero  
+**Estudiante(s) / Autores:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel  
 **Semana:** 7  
 **Proyecto:** GeoCam Persistente (Base de Datos Local Offline-First con Drizzle ORM y SQLite)
 
@@ -107,7 +107,7 @@
 
 # Registro de Auditoría de IA – Semana 8
 
-**Estudiante(s):** Leonardo Carrillo Caballero  
+**Estudiante(s) / Autores:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel  
 **Semana:** 8  
 **Proyecto:** GeoCam Cloud Backup (Backend as a Service con Supabase: Auth, PostgreSQL + RLS, Storage Privado y Realtime)
 
@@ -168,7 +168,7 @@
 
 # Registro de Auditoría de IA – Semana 9
 
-**Estudiante(s):** Leonardo Carrillo Caballero  
+**Estudiante(s) / Autores:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel  
 **Semana:** 9  
 **Proyecto:** GeoCam Sync Engine (Offline-First Bidireccional, Soft Deletes, Cursor Pagination y TanStack Query v5)
 
@@ -222,7 +222,7 @@
 
 # Registro de Auditoría de IA – Semana 10 (Tag v2.0.0)
 
-**Estudiante(s):** Leonardo Carrillo Caballero  
+**Estudiante(s) / Autores:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel  
 **Semana:** 10  
 **Proyecto:** GeoCam IA Multimodal – Asistente Tutor en Streaming, Visión Artificial "GeoCam Ve" y Retos de Producto C1 a C6
 

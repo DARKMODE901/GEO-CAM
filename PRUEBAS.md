@@ -2,7 +2,7 @@
 
 **Proyecto:** GeoCam – Asistente IA Multimodal, Proxy Seguro con Supabase Edge Functions y Vercel AI SDK v7  
 **Fecha:** 16 de noviembre de 2026  
-**Responsable:** Leonardo Carrillo Caballero  
+**Autores / Equipo de Desarrollo:** Leonardo Carrillo, Edgar Zúñiga y Deivis Magdaniel  
 
 ---
 
