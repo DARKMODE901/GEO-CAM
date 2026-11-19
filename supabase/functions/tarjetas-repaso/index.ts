@@ -86,18 +86,39 @@ Deno.serve(
         );
       }
 
+      const modelMessages = await convertToModelMessages(messages.slice(-20));
+      const instructions =
+        'Eres el Tutor Pedagógico de GeoCam. Analiza la conversación proporcionada y genera entre 3 y 5 tarjetas de repaso (pregunta y respuesta breve) para consolidar los conocimientos geográficos, culturales o ambientales tratados.';
+
       // En Vercel AI SDK v7: generateText + output: Output.object({ schema })
-      const { output } = await generateText({
-        model: google(modelName),
-        instructions:
-          'Eres el Tutor Pedagógico de GeoCam. Analiza la conversación proporcionada y genera entre 3 y 5 tarjetas de repaso (pregunta y respuesta breve) para consolidar los conocimientos geográficos, culturales o ambientales tratados.',
-        messages: await convertToModelMessages(messages.slice(-20)),
-        output: Output.object({
-          schema: TarjetasSchema,
-        }),
-        temperature: 0.3,
-        maxRetries: 1,
-      });
+      // Con fallback automático a gemini-3.5-flash-lite ante alta demanda (503) o cuota (429)
+      let output;
+      try {
+        const res = await generateText({
+          model: google(modelName),
+          instructions,
+          messages: modelMessages,
+          output: Output.object({
+            schema: TarjetasSchema,
+          }),
+          temperature: 0.3,
+          maxRetries: 1,
+        });
+        output = res.output;
+      } catch (primaryErr) {
+        console.warn(`[tarjetas-repaso] Reintentando con modelo de respaldo gemini-3.5-flash-lite tras fallo en ${modelName}:`, primaryErr);
+        const fallbackRes = await generateText({
+          model: google('gemini-3.5-flash-lite'),
+          instructions,
+          messages: modelMessages,
+          output: Output.object({
+            schema: TarjetasSchema,
+          }),
+          temperature: 0.3,
+          maxRetries: 1,
+        });
+        output = fallbackRes.output;
+      }
 
       return new Response(JSON.stringify(output), {
         status: 200,

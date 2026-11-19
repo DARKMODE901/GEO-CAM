@@ -70,28 +70,45 @@ Deno.serve(
 
       // Limpiar prefijo data:image/...;base64, si viene incluido
       const cleanBase64 = rawImage.replace(/^data:image\/[a-zA-Z]+;base64,/, '').trim();
+      const instructions =
+        'Eres un asistente de visión para GeoCam. Describe brevemente la foto en 1 o 2 frases concisas en español neutro, destacando elementos geográficos, urbanos o naturales destacados.';
+      const visionMessages = [
+        {
+          role: 'user' as const,
+          content: [
+            { type: 'text' as const, text: 'Describe esta fotografía en 1 o 2 frases breves y precisas.' },
+            {
+              type: 'file' as const,
+              mediaType: 'image/jpeg',
+              data: cleanBase64,
+            },
+          ],
+        },
+      ];
 
-      const { text } = await generateText({
-        model: google(modelName),
-        instructions:
-          'Eres un asistente de visión para GeoCam. Describe brevemente la foto en 1 o 2 frases concisas en español neutro, destacando elementos geográficos, urbanos o naturales destacados.',
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Describe esta fotografía en 1 o 2 frases breves y precisas.' },
-              {
-                type: 'file',
-                mediaType: 'image/jpeg',
-                data: cleanBase64,
-              },
-            ],
-          },
-        ],
-        temperature: 0.3,
-        maxRetries: 1,
-        maxOutputTokens: 256,
-      });
+      let text = '';
+      try {
+        const res = await generateText({
+          model: google(modelName),
+          instructions,
+          messages: visionMessages,
+          temperature: 0.3,
+          maxRetries: 1,
+          maxOutputTokens: 256,
+        });
+        text = res.text;
+      } catch (primaryErr) {
+        console.warn(`[describir-foto] Reintentando con modelo de respaldo gemini-3.5-flash-lite tras fallo en ${modelName}:`, primaryErr);
+        const fallbackRes = await generateText({
+          model: google('gemini-3.5-flash-lite'),
+          instructions,
+          messages: visionMessages,
+          temperature: 0.3,
+          maxRetries: 1,
+          maxOutputTokens: 256,
+        });
+        text = fallbackRes.text;
+      }
 
       return new Response(
         JSON.stringify({ descripcion: text.trim() }),

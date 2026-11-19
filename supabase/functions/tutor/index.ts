@@ -114,11 +114,14 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
       return createUIMessageStreamResponse({
         stream: toUIMessageStream({
           stream: result.stream,
-          onError: (error) => {
+          onError: (error: unknown) => {
             console.error('[tutor] Error en stream de Gemini:', error);
             const real = RetryError.isInstance(error) ? error.lastError : error;
             if (APICallError.isInstance(real) && real.statusCode === 429) {
               return 'Se ha alcanzado temporalmente la cuota gratuita de Gemini. Por favor, espera un minuto antes de continuar la conversación.';
+            }
+            if (APICallError.isInstance(real) && real.statusCode === 503) {
+              return 'El servidor de Google Gemini experimenta alta demanda temporal en este momento. Por favor, presiona Reintentar en unos segundos.';
             }
             return 'Ocurrió un error inesperado al generar la respuesta con la IA. Por favor, reintenta en unos instantes.';
           },
