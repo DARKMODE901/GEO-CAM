@@ -93,8 +93,9 @@ Deno.serve(
           instructions,
           messages: visionMessages,
           temperature: 0.3,
-          maxRetries: 1,
+          maxRetries: 0,
           maxOutputTokens: 256,
+          abortSignal: AbortSignal.timeout(10000),
         });
         text = res.text;
       } catch (primaryErr) {
@@ -106,6 +107,7 @@ Deno.serve(
           temperature: 0.3,
           maxRetries: 1,
           maxOutputTokens: 256,
+          abortSignal: AbortSignal.timeout(25000),
         });
         text = fallbackRes.text;
       }

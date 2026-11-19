@@ -105,39 +105,77 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
 
       const modelMessages = await convertToModelMessages(messages.slice(-20));
       const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-3.5-flash-lite';
+      const PRIMARY_FIRST_TOKEN_MS = 8000;
+      const FALLBACK_FIRST_TOKEN_MS = 25000;
 
       type TutorChunk = TextStreamPart<ToolSet>;
 
-      const iniciarStream = (targetModel: string) =>
+      const iniciarStream = (targetModel: string, maxRetries: number, abortSignal: AbortSignal) =>
         streamText({
           model: google(targetModel),
           instructions,
           messages: modelMessages,
           temperature: 0.4,
-          maxRetries: 1,
+          maxRetries,
           maxOutputTokens: 1024,
+          abortSignal,
         }).stream;
 
-      // Stream con fallback automático: si el modelo primario (gemini-3.8-flash) falla antes de emitir texto
-      // (p. ej. 503 alta demanda o 429 cuota), cambia transparentemente a gemini-3.5-flash-lite.
+      const readWithDeadline = async (
+        reader: ReadableStreamDefaultReader<TutorChunk>,
+        deadlineMs: number | null,
+        label: string
+      ) => {
+        if (deadlineMs === null) return reader.read();
+        const remaining = deadlineMs - Date.now();
+        if (remaining <= 0) {
+          throw new Error(`TIMEOUT_${label}`);
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error(`TIMEOUT_${label}`)), remaining);
+            }),
+          ]);
+        } finally {
+          if (timer !== undefined) clearTimeout(timer);
+        }
+      };
+
+      // Stream con fallback rápido: maxRetries=0 y timeout de 8s en el modelo primario (gemini-3.8-flash).
+      // Si devuelve error (503/429) o no responde texto en 8s, aborta y conmuta a gemini-3.5-flash-lite.
       let activeReader: ReadableStreamDefaultReader<TutorChunk> | null = null;
+      let activeAbort: AbortController | null = null;
+      let clientCancelled = false;
+
       const streamWithFallback = new ReadableStream<TutorChunk>({
         async start(controller) {
-          const primaryReader = iniciarStream(modelName).getReader();
+          console.log(`[tutor] Iniciando stream primario con ${modelName}`);
+          const primaryAbort = new AbortController();
+          activeAbort = primaryAbort;
+          const primaryReader = iniciarStream(modelName, 0, primaryAbort.signal).getReader();
           activeReader = primaryReader;
+
           const buffered: TutorChunk[] = [];
-          let hasContent = false;
+          let hasText = false;
           let fallbackNeeded = false;
+          const primaryDeadline = Date.now() + PRIMARY_FIRST_TOKEN_MS;
 
           try {
-            while (true) {
-              const { done, value } = await primaryReader.read();
+            while (!clientCancelled) {
+              const { done, value } = await readWithDeadline(
+                primaryReader,
+                hasText ? null : primaryDeadline,
+                'PRIMARIO'
+              );
               if (done) break;
 
-              if (!hasContent) {
+              if (!hasText) {
                 if (value.type === 'error' && modelName !== fallbackModel) {
                   console.warn(
-                    `[tutor] Modelo primario (${modelName}) falló antes de responder; cambiando a respaldo ${fallbackModel}:`,
+                    `[tutor] Modelo primario (${modelName}) devolvió error antes de emitir texto; conmutando a ${fallbackModel}:`,
                     value.error
                   );
                   fallbackNeeded = true;
@@ -145,8 +183,9 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
                 }
 
                 buffered.push(value);
-                if (value.type === 'text-delta' || value.type === 'reasoning-delta' || value.type === 'error') {
-                  hasContent = true;
+                if (value.type === 'text-delta' || value.type === 'error') {
+                  hasText = true;
+                  console.log(`[tutor] Primer chunk de ${modelName}: ${value.type}`);
                   for (const item of buffered) controller.enqueue(item);
                   buffered.length = 0;
                 }
@@ -155,47 +194,86 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
               }
             }
 
-            if (!fallbackNeeded) {
-              for (const item of buffered) controller.enqueue(item);
-              controller.close();
+            if (!fallbackNeeded || clientCancelled) {
+              if (!clientCancelled) {
+                for (const item of buffered) controller.enqueue(item);
+                controller.close();
+              }
               return;
             }
           } catch (err) {
-            if (hasContent || modelName === fallbackModel) {
+            if (clientCancelled) return;
+            if (hasText || modelName === fallbackModel) {
               controller.enqueue({ type: 'error', error: err });
               controller.close();
               return;
             }
             console.warn(
-              `[tutor] Excepción en modelo primario (${modelName}); cambiando a respaldo ${fallbackModel}:`,
+              `[tutor] Modelo primario (${modelName}) falló o superó ${PRIMARY_FIRST_TOKEN_MS}ms; conmutando a ${fallbackModel}:`,
               err
             );
+            primaryAbort.abort(err);
             fallbackNeeded = true;
           } finally {
-            primaryReader.releaseLock();
+            try {
+              primaryReader.releaseLock();
+            } catch {
+              // Ignorar si ya fue liberado
+            }
             if (activeReader === primaryReader) activeReader = null;
+            if (activeAbort === primaryAbort) activeAbort = null;
           }
 
-          if (fallbackNeeded) {
-            const fallbackReader = iniciarStream(fallbackModel).getReader();
+          if (fallbackNeeded && !clientCancelled) {
+            console.log(`[tutor] Iniciando stream de respaldo con ${fallbackModel}`);
+            const fallbackAbort = new AbortController();
+            activeAbort = fallbackAbort;
+            const fallbackReader = iniciarStream(fallbackModel, 1, fallbackAbort.signal).getReader();
             activeReader = fallbackReader;
+            const fallbackDeadline = Date.now() + FALLBACK_FIRST_TOKEN_MS;
+            let fallbackHasText = false;
+
             try {
-              while (true) {
-                const { done, value } = await fallbackReader.read();
+              while (!clientCancelled) {
+                const { done, value } = await readWithDeadline(
+                  fallbackReader,
+                  fallbackHasText ? null : fallbackDeadline,
+                  'RESPALDO'
+                );
                 if (done) break;
+                if (!fallbackHasText && (value.type === 'text-delta' || value.type === 'error')) {
+                  fallbackHasText = true;
+                  console.log(`[tutor] Primer chunk de ${fallbackModel}: ${value.type}`);
+                }
                 controller.enqueue(value);
               }
-              controller.close();
+              if (!clientCancelled) controller.close();
             } catch (err) {
-              controller.enqueue({ type: 'error', error: err });
-              controller.close();
+              if (!clientCancelled) {
+                fallbackAbort.abort(err);
+                controller.enqueue({ type: 'error', error: err });
+                controller.close();
+              }
             } finally {
-              fallbackReader.releaseLock();
+              try {
+                fallbackReader.releaseLock();
+              } catch {
+                // Ignorar si ya fue liberado
+              }
               if (activeReader === fallbackReader) activeReader = null;
+              if (activeAbort === fallbackAbort) activeAbort = null;
             }
           }
         },
         async cancel(reason) {
+          clientCancelled = true;
+          if (activeAbort) {
+            try {
+              activeAbort.abort(reason);
+            } catch {
+              // Ignorar
+            }
+          }
           if (activeReader) {
             try {
               await activeReader.cancel(reason);
@@ -211,6 +289,9 @@ Si no puedes identificar con certeza una ubicación o elemento, menciónalo con 
           stream: streamWithFallback,
           onError: (error: unknown) => {
             console.error('[tutor] Error en stream de Gemini:', error);
+            if (error instanceof Error && error.message.startsWith('TIMEOUT_')) {
+              return 'Google Gemini tardó demasiado en responder en este momento. Por favor, presiona Reintentar.';
+            }
             const real = RetryError.isInstance(error) ? error.lastError : error;
             if (APICallError.isInstance(real) && real.statusCode === 429) {
               return 'Se ha alcanzado temporalmente la cuota gratuita de Gemini. Por favor, espera un minuto antes de continuar la conversación.';

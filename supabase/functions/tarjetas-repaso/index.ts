@@ -102,7 +102,8 @@ Deno.serve(
             schema: TarjetasSchema,
           }),
           temperature: 0.3,
-          maxRetries: 1,
+          maxRetries: 0,
+          abortSignal: AbortSignal.timeout(10000),
         });
         output = res.output;
       } catch (primaryErr) {
@@ -116,6 +117,7 @@ Deno.serve(
           }),
           temperature: 0.3,
           maxRetries: 1,
+          abortSignal: AbortSignal.timeout(25000),
         });
         output = fallbackRes.output;
       }
