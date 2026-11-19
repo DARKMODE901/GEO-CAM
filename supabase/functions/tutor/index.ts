@@ -11,6 +11,8 @@ import {
   createUIMessageStreamResponse,
   streamText,
   toUIMessageStream,
+  type TextStreamPart,
+  type ToolSet,
   type UIMessage,
 } from 'npm:ai@7';
 import { z } from 'npm:zod@3';
@@ -101,19 +103,112 @@ Responde de forma amigable, clara, precisa y siempre en español.
 Si el usuario adjunta una foto, analiza detalladamente el paisaje, construcciones, elementos geográficos o biofísicos observables.
 Si no puedes identificar con certeza una ubicación o elemento, menciónalo con honestidad y brinda pautas para investigarlo.`;
 
-      // Llamada con streaming en Vercel AI SDK v7
-      const result = streamText({
-        model: google(modelName),
-        instructions,
-        messages: await convertToModelMessages(messages.slice(-20)),
-        temperature: 0.4,
-        maxRetries: 1,
-        maxOutputTokens: 1024,
+      const modelMessages = await convertToModelMessages(messages.slice(-20));
+      const fallbackModel = Deno.env.get('GEMINI_FALLBACK_MODEL') ?? 'gemini-3.5-flash-lite';
+
+      type TutorChunk = TextStreamPart<ToolSet>;
+
+      const iniciarStream = (targetModel: string) =>
+        streamText({
+          model: google(targetModel),
+          instructions,
+          messages: modelMessages,
+          temperature: 0.4,
+          maxRetries: 1,
+          maxOutputTokens: 1024,
+        }).stream;
+
+      // Stream con fallback automático: si el modelo primario (gemini-3.8-flash) falla antes de emitir texto
+      // (p. ej. 503 alta demanda o 429 cuota), cambia transparentemente a gemini-3.5-flash-lite.
+      let activeReader: ReadableStreamDefaultReader<TutorChunk> | null = null;
+      const streamWithFallback = new ReadableStream<TutorChunk>({
+        async start(controller) {
+          const primaryReader = iniciarStream(modelName).getReader();
+          activeReader = primaryReader;
+          const buffered: TutorChunk[] = [];
+          let hasContent = false;
+          let fallbackNeeded = false;
+
+          try {
+            while (true) {
+              const { done, value } = await primaryReader.read();
+              if (done) break;
+
+              if (!hasContent) {
+                if (value.type === 'error' && modelName !== fallbackModel) {
+                  console.warn(
+                    `[tutor] Modelo primario (${modelName}) falló antes de responder; cambiando a respaldo ${fallbackModel}:`,
+                    value.error
+                  );
+                  fallbackNeeded = true;
+                  break;
+                }
+
+                buffered.push(value);
+                if (value.type === 'text-delta' || value.type === 'reasoning-delta' || value.type === 'error') {
+                  hasContent = true;
+                  for (const item of buffered) controller.enqueue(item);
+                  buffered.length = 0;
+                }
+              } else {
+                controller.enqueue(value);
+              }
+            }
+
+            if (!fallbackNeeded) {
+              for (const item of buffered) controller.enqueue(item);
+              controller.close();
+              return;
+            }
+          } catch (err) {
+            if (hasContent || modelName === fallbackModel) {
+              controller.enqueue({ type: 'error', error: err });
+              controller.close();
+              return;
+            }
+            console.warn(
+              `[tutor] Excepción en modelo primario (${modelName}); cambiando a respaldo ${fallbackModel}:`,
+              err
+            );
+            fallbackNeeded = true;
+          } finally {
+            primaryReader.releaseLock();
+            if (activeReader === primaryReader) activeReader = null;
+          }
+
+          if (fallbackNeeded) {
+            const fallbackReader = iniciarStream(fallbackModel).getReader();
+            activeReader = fallbackReader;
+            try {
+              while (true) {
+                const { done, value } = await fallbackReader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+              controller.close();
+            } catch (err) {
+              controller.enqueue({ type: 'error', error: err });
+              controller.close();
+            } finally {
+              fallbackReader.releaseLock();
+              if (activeReader === fallbackReader) activeReader = null;
+            }
+          }
+        },
+        async cancel(reason) {
+          if (activeReader) {
+            try {
+              await activeReader.cancel(reason);
+            } catch {
+              // Ignorar errores al cancelar lector ya cerrado
+            }
+          }
+        },
       });
 
       return createUIMessageStreamResponse({
         stream: toUIMessageStream({
-          stream: result.stream,
+          stream: streamWithFallback,
           onError: (error: unknown) => {
             console.error('[tutor] Error en stream de Gemini:', error);
             const real = RetryError.isInstance(error) ? error.lastError : error;

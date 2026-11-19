@@ -376,7 +376,13 @@ function TutorChatView({ initialMessages }: { initialMessages: UIMessage[] }) {
             </Text>
           </View>
           <View style={styles.errorActions}>
-            <Pressable style={styles.retryBtn} onPress={() => regenerate()}>
+            <Pressable
+              style={styles.retryBtn}
+              onPress={() => {
+                clearError();
+                regenerate();
+              }}
+            >
               <Text style={styles.retryBtnText}>🔄 Reintentar</Text>
             </Pressable>
             <Pressable style={styles.dismissBtn} onPress={() => clearError()}>
